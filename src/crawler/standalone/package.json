@@ -1,0 +1,23 @@
+{
+  "name": "engine-harvester",
+  "version": "1.0.0",
+  "description": "Automated GitHub repository crawler and engine sanitizer with blacklist and cooldown timers",
+  "main": "harvester.ts",
+  "scripts": {
+    "start": "ts-node harvester.ts",
+    "crawl": "ts-node harvester.ts --auto",
+    "blacklist:list": "ts-node harvester.ts --blacklist"
+  },
+  "keywords": ["agent-engine", "github-crawler", "sanitizer", "cooldown-timer", "blacklist"],
+  "author": "Engine Harvester System",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@google/genai": "^0.1.2",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}

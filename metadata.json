@@ -1,0 +1,6 @@
+{
+  "name": "DeepSeek Harness Engine & Benchmark Workbench",
+  "description": "Sanitized clean-room implementation of the agent runtime engines powering deepseek-harness, complete with Cordis-style spatiotemporal composability, ReAct agent loop, multi-model streaming adapters, sandboxed tool execution, session tree pruning, evaluation metrics, and comprehensive architectural README.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

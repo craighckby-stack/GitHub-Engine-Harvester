@@ -1,0 +1,23 @@
+[
+  {
+    "repoFullName": "deepseek-ai/deepseek-harness",
+    "status": "completed",
+    "processedAt": "2026-09-24T03:00:00.000Z",
+    "enginesExtracted": 6,
+    "outputPath": "catalogue/deepseek-harness-sanitized-engine.md"
+  },
+  {
+    "repoFullName": "princeton-nlp/SWE-agent",
+    "status": "completed",
+    "processedAt": "2026-09-24T02:00:00.000Z",
+    "enginesExtracted": 3,
+    "outputPath": "catalogue/swe-agent-sanitized-engine.md"
+  },
+  {
+    "repoFullName": "OpenHands/OpenHands",
+    "status": "completed",
+    "processedAt": "2026-09-24T01:00:00.000Z",
+    "enginesExtracted": 3,
+    "outputPath": "catalogue/openhands-sanitized-engine.md"
+  }
+]
