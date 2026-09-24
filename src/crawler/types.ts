@@ -52,6 +52,16 @@ export interface CrawlJob {
   retryCount: number;
   lastError?: string;
   markdownOutput?: string;
+  githubPushResult?: {
+    success: boolean;
+    repo: string;
+    branch: string;
+    commitSha?: string;
+    commitUrl?: string;
+    filesCount?: number;
+    error?: string;
+    timestamp: number;
+  };
 }
 
 export interface HarvesterConfig {
@@ -67,6 +77,26 @@ export interface HarvesterConfig {
   autoSanitize: boolean;
   defaultBrandKeywords: string[];
   outputDirectory: string;
+  // Automated GitHub Repository Push Configurations
+  autoPushToGithub: boolean;
+  githubToken?: string;
+  githubTargetRepo?: string; // e.g. "my-org/sanitized-ai-engines"
+  githubTargetBranch?: string; // default "main"
+  githubTargetDir?: string; // default "engines/"
+}
+
+export interface GitHubPushLedgerItem {
+  id: string;
+  engineName: string;
+  sourceRepo: string;
+  targetRepo: string;
+  branch: string;
+  commitSha: string;
+  commitUrl: string;
+  filesPushedCount: number;
+  timestamp: number;
+  status: 'success' | 'failed';
+  errorMessage?: string;
 }
 
 export interface HarvesterTelemetry {
@@ -77,6 +107,16 @@ export interface HarvesterTelemetry {
   totalErrorsRecovered: number;
   totalCooldownMs: number;
   currentActiveJobId: string | null;
+  // GitHub Automated Push metrics
+  totalPushedToGithub: number;
+  lastPushedCommit?: {
+    repo: string;
+    branch: string;
+    commitSha: string;
+    commitUrl: string;
+    timestamp: number;
+  };
+  recentPushes: GitHubPushLedgerItem[];
   currentCooldownTimer: {
     type: 'intra_repo' | 'inter_repo' | 'rate_limit_backoff' | 'none';
     remainingMs: number;

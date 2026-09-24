@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 import {handleEngineApi} from './src/server/engine-api';
+import {handleGitHubApi} from './src/server/github-api';
 
 export default defineConfig(() => {
   return {
@@ -13,7 +14,9 @@ export default defineConfig(() => {
         name: 'dsh-engine-server-middleware',
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
-            handleEngineApi(req, res, next);
+            handleGitHubApi(req, res, () => {
+              handleEngineApi(req, res, next);
+            });
           });
         },
       },

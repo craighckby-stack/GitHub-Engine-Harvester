@@ -38,12 +38,19 @@ import {
   Activity,
   History,
   Zap,
+  UploadCloud,
+  GitBranch,
+  GitCommit,
+  FolderGit2,
+  Globe,
 } from 'lucide-react';
 
 import { CATALOG_ENTRIES, CatalogSystemEntry } from './catalog/catalog-data';
 import { createHarnessSystem, AgentStepTrajectory, AgentStatus } from './engines';
 import { EngineHarvester } from './crawler/engine-harvester';
 import { CrawlJob, HarvesterTelemetry, BlacklistEntry } from './crawler/types';
+import { GitHubObservatory } from './crawler/GitHubObservatory';
+import { GitHubPushDialog } from './crawler/GitHubPushDialog';
 
 export default function App() {
   // Navigation
@@ -59,6 +66,8 @@ export default function App() {
     totalErrorsRecovered: 0,
     totalCooldownMs: 0,
     currentActiveJobId: null,
+    totalPushedToGithub: 0,
+    recentPushes: [],
     currentCooldownTimer: {
       type: 'none',
       remainingMs: 0,
@@ -85,6 +94,26 @@ export default function App() {
   const [newRepoInput, setNewRepoInput] = useState('');
   const [manualBlacklistInput, setManualBlacklistInput] = useState('');
   const [blacklistSearch, setBlacklistSearch] = useState('');
+
+  // GitHub Integration & Automated Push State
+  const [autoPushEnabled, setAutoPushEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('dsh_auto_push') === 'true';
+  });
+  const [githubToken, setGithubToken] = useState<string>(() => {
+    return localStorage.getItem('dsh_github_token') || '';
+  });
+  const [githubTargetRepo, setGithubTargetRepo] = useState<string>(() => {
+    return localStorage.getItem('dsh_github_repo') || '';
+  });
+  const [githubTargetBranch, setGithubTargetBranch] = useState<string>(() => {
+    return localStorage.getItem('dsh_github_branch') || 'main';
+  });
+  const [pushDialogData, setPushDialogData] = useState<{
+    isOpen: boolean;
+    engineName: string;
+    sourceRepo?: string;
+    markdownContent: string;
+  } | null>(null);
 
   // Catalog State
   const [catalogList, setCatalogList] = useState<CatalogSystemEntry[]>(CATALOG_ENTRIES);
@@ -113,29 +142,39 @@ export default function App() {
 
       // Auto-update catalog when jobs complete
       const completedJobs = jobs.filter((j) => j.status === 'completed' && j.markdownOutput);
-      completedJobs.forEach((job) => {
-        if (!catalogList.some((c) => c.sourceRepo.toLowerCase() === job.url.toLowerCase())) {
-          const newEntry: CatalogSystemEntry = {
-            id: `crawled-${job.name}`,
-            title: job.sanitizedTitle || `${job.name} Sanitized Engine`,
-            sourceRepo: job.url,
-            originalBrand: job.owner,
-            genericCategory: 'Automated Ingested Engine',
-            summary: `Automated sanitized extraction of core runtime engines from ${job.repoFullName}.`,
-            engines: [
-              {
-                name: `${job.name} Core Engine`,
-                role: 'Runtime Engine & State Loop',
-                whatItDoes: `Core runtime engine extracted from ${job.repoFullName} with vendor branding scrubbed.`,
-                inputsOutputs: 'See complete Markdown specification for details.',
-                codeSnippet: job.markdownOutput || '// Sanitized code in .md',
-              },
-            ],
-            fullMarkdownContent: job.markdownOutput || '',
-          };
-          setCatalogList((prev) => [newEntry, ...prev]);
-        }
-      });
+      if (completedJobs.length > 0) {
+        setCatalogList((prev) => {
+          let updated = [...prev];
+          for (const job of completedJobs) {
+            const entryId = `crawled-${job.owner}-${job.name}`.toLowerCase();
+            const exists = updated.some(
+              (c) => c.id.toLowerCase() === entryId || c.sourceRepo.toLowerCase() === job.url.toLowerCase()
+            );
+            if (!exists) {
+              const newEntry: CatalogSystemEntry = {
+                id: entryId,
+                title: job.sanitizedTitle || `${job.name} Sanitized Engine`,
+                sourceRepo: job.url,
+                originalBrand: job.owner,
+                genericCategory: 'Automated Ingested Engine',
+                summary: `Automated sanitized extraction of core runtime engines from ${job.repoFullName}.`,
+                engines: [
+                  {
+                    name: `${job.name} Core Engine`,
+                    role: 'Runtime Engine & State Loop',
+                    whatItDoes: `Core runtime engine extracted from ${job.repoFullName} with vendor branding scrubbed.`,
+                    inputsOutputs: 'See complete Markdown specification for details.',
+                    codeSnippet: job.markdownOutput || '// Sanitized code in .md',
+                  },
+                ],
+                fullMarkdownContent: job.markdownOutput || '',
+              };
+              updated = [newEntry, ...updated];
+            }
+          }
+          return updated;
+        });
+      }
     });
     return () => {
       unsub();
@@ -149,6 +188,21 @@ export default function App() {
       interRepoCooldownMs: interCooldown,
     });
   }, [intraCooldown, interCooldown, harvester]);
+
+  // Sync GitHub Integration & Automated Push Settings
+  useEffect(() => {
+    localStorage.setItem('dsh_auto_push', String(autoPushEnabled));
+    localStorage.setItem('dsh_github_token', githubToken);
+    localStorage.setItem('dsh_github_repo', githubTargetRepo);
+    localStorage.setItem('dsh_github_branch', githubTargetBranch);
+
+    harvester.updateConfig({
+      autoPushToGithub: autoPushEnabled,
+      githubToken: githubToken || undefined,
+      githubTargetRepo: githubTargetRepo || undefined,
+      githubTargetBranch: githubTargetBranch || 'main',
+    });
+  }, [autoPushEnabled, githubToken, githubTargetRepo, githubTargetBranch, harvester]);
 
   const currentSystem = catalogList.find((s) => s.id === selectedSystemId) || catalogList[0];
   const activeMarkdownToDisplay = customMarkdown || currentSystem?.fullMarkdownContent || '';
@@ -297,6 +351,15 @@ export default function App() {
                 <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-amber-950 text-amber-300 border border-amber-800/80">
                   Cooldown Timers Active
                 </span>
+                <span className="hidden md:inline-flex px-2 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  GitHub: 420M+ Repos
+                </span>
+                {autoPushEnabled && (
+                  <span className="hidden sm:inline-flex items-center space-x-1 px-2 py-0.5 text-[10px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    <UploadCloud className="h-3 w-3 text-emerald-400" />
+                    <span>Auto-Push Active</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">
                 Automated GitHub repository crawler, blacklist deduplication, and sanitized engine cataloger
@@ -395,6 +458,20 @@ export default function App() {
         {/* ========================================================================= */}
         {activeTab === 'harvester' && (
           <div className="space-y-6">
+            {/* Live GitHub Repository Ecosystem & Automated Git Push Controller */}
+            <GitHubObservatory
+              autoPushEnabled={autoPushEnabled}
+              onToggleAutoPush={setAutoPushEnabled}
+              targetRepo={githubTargetRepo}
+              onUpdateTargetRepo={setGithubTargetRepo}
+              targetBranch={githubTargetBranch}
+              onUpdateTargetBranch={setGithubTargetBranch}
+              githubToken={githubToken}
+              onUpdateToken={setGithubToken}
+              recentPushes={harvesterTelemetry.recentPushes || []}
+              totalPushedCount={harvesterTelemetry.totalPushedToGithub || 0}
+            />
+
             {/* Control Dashboard Header */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden shadow-xl">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -665,19 +742,49 @@ export default function App() {
                         </div>
 
                         {job.status === 'completed' && (
-                          <button
-                            onClick={() => {
-                              setSelectedSystemId(job.id);
-                              if (job.markdownOutput) {
-                                setCustomMarkdown(job.markdownOutput);
-                              }
-                              setActiveTab('markdown');
-                            }}
-                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 text-xs font-medium border border-slate-700 flex items-center space-x-1"
-                          >
-                            <Eye className="h-3 w-3" />
-                            <span>View .md</span>
-                          </button>
+                          <div className="flex items-center space-x-1.5">
+                            {job.githubPushResult && job.githubPushResult.success && (
+                              <a
+                                href={job.githubPushResult.commitUrl || `https://github.com/${job.githubPushResult.repo}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs font-mono border border-emerald-800 flex items-center space-x-1"
+                                title="View commit on GitHub"
+                              >
+                                <UploadCloud className="h-3 w-3 text-emerald-400" />
+                                <span>Pushed ({job.githubPushResult.commitSha?.slice(0, 7) || 'commit'})</span>
+                                <ExternalLink className="h-2.5 w-2.5" />
+                              </a>
+                            )}
+                            <button
+                              onClick={() => {
+                                setPushDialogData({
+                                  isOpen: true,
+                                  engineName: job.sanitizedTitle || job.name,
+                                  sourceRepo: job.repoFullName,
+                                  markdownContent: job.markdownOutput || '',
+                                });
+                              }}
+                              className="px-2 py-1 rounded bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-xs font-medium border border-indigo-800 flex items-center space-x-1 cursor-pointer"
+                              title="Push files to GitHub repository"
+                            >
+                              <UploadCloud className="h-3 w-3" />
+                              <span>Push</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedSystemId(job.id);
+                                if (job.markdownOutput) {
+                                  setCustomMarkdown(job.markdownOutput);
+                                }
+                                setActiveTab('markdown');
+                              }}
+                              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 text-xs font-medium border border-slate-700 flex items-center space-x-1 cursor-pointer"
+                            >
+                              <Eye className="h-3 w-3" />
+                              <span>View .md</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -685,6 +792,47 @@ export default function App() {
                 })}
               </div>
             </div>
+
+            {/* Recent Automated GitHub Pushes Ledger */}
+            {harvesterTelemetry.recentPushes && harvesterTelemetry.recentPushes.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                <div className="p-4 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <FolderGit2 className="h-4 w-4 text-emerald-400" />
+                    <h3 className="text-sm font-semibold text-white">Recent Automated GitHub Pushes</h3>
+                  </div>
+                  <span className="text-xs font-mono text-emerald-400">
+                    {harvesterTelemetry.totalPushedToGithub} Total Commits Pushed
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-800 max-h-60 overflow-y-auto">
+                  {harvesterTelemetry.recentPushes.map((p) => (
+                    <div key={p.id} className="p-3 flex items-center justify-between text-xs hover:bg-slate-900/40">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-white">{p.engineName}</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                            {p.filesPushedCount} files (.md &amp; .ts)
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          Target: <span className="text-slate-200">{p.targetRepo}</span> ({p.branch}) &bull; Source: {p.sourceRepo}
+                        </div>
+                      </div>
+                      <a
+                        href={p.commitUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-mono text-[11px] px-2.5 py-1 rounded bg-slate-800 border border-slate-700"
+                      >
+                        <span>{p.commitSha.slice(0, 7)}</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Persistent Blacklist Registry */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
@@ -815,16 +963,31 @@ export default function App() {
                   <Eye className="h-4 w-4" />
                   <span>Open in .md Inspector</span>
                 </button>
+
+                <button
+                  onClick={() => {
+                    setPushDialogData({
+                      isOpen: true,
+                      engineName: currentSystem.title,
+                      sourceRepo: currentSystem.sourceRepo,
+                      markdownContent: currentSystem.fullMarkdownContent,
+                    });
+                  }}
+                  className="flex items-center space-x-2 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+                >
+                  <UploadCloud className="h-4 w-4" />
+                  <span>Push to GitHub Repo</span>
+                </button>
               </div>
             </div>
 
             {/* System Selector Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {catalogList.map((entry) => {
+              {catalogList.map((entry, idx) => {
                 const isSelected = entry.id === selectedSystemId;
                 return (
                   <div
-                    key={entry.id}
+                    key={`${entry.id}-${idx}`}
                     onClick={() => {
                       setSelectedSystemId(entry.id);
                       setCustomMarkdown(entry.fullMarkdownContent);
@@ -855,10 +1018,28 @@ export default function App() {
                       <span className="text-amber-300/90 font-mono">
                         Sanitized: <span className="line-through text-slate-500">{entry.originalBrand}</span>
                       </span>
-                      <span className="text-indigo-400 font-medium flex items-center space-x-1">
-                        <span>Inspect</span>
-                        <ArrowRight className="h-3 w-3" />
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPushDialogData({
+                              isOpen: true,
+                              engineName: entry.title,
+                              sourceRepo: entry.sourceRepo,
+                              markdownContent: entry.fullMarkdownContent,
+                            });
+                          }}
+                          className="px-2 py-0.5 rounded bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 text-[10px] font-medium flex items-center space-x-1 cursor-pointer"
+                          title="Push this engine to GitHub"
+                        >
+                          <UploadCloud className="h-3 w-3 text-emerald-400" />
+                          <span>Push</span>
+                        </button>
+                        <span className="text-indigo-400 font-medium flex items-center space-x-1">
+                          <span>Inspect</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1041,6 +1222,21 @@ export default function App() {
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span>Download .md</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setPushDialogData({
+                      isOpen: true,
+                      engineName: currentSystem.title,
+                      sourceRepo: currentSystem.sourceRepo,
+                      markdownContent: activeMarkdownToDisplay,
+                    });
+                  }}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+                >
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  <span>Push to GitHub Repo</span>
                 </button>
               </div>
             </div>
@@ -1239,6 +1435,29 @@ export default function App() {
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 text-center text-xs text-slate-500">
         engine-harvester — Single-repository autonomous GitHub engine crawler, persistent blacklist, and sanitized Markdown catalogue.
       </footer>
+
+      {/* Manual & Quick GitHub Push Dialog */}
+      {pushDialogData && (
+        <GitHubPushDialog
+          isOpen={pushDialogData.isOpen}
+          onClose={() => setPushDialogData(null)}
+          engineName={pushDialogData.engineName}
+          sourceRepo={pushDialogData.sourceRepo}
+          markdownContent={pushDialogData.markdownContent}
+          defaultTargetRepo={githubTargetRepo}
+          defaultBranch={githubTargetBranch}
+          githubToken={githubToken}
+          onPushSuccess={() => {
+            // Refresh telemetry pushes
+            harvester.updateConfig({
+              autoPushToGithub: autoPushEnabled,
+              githubToken,
+              githubTargetRepo,
+              githubTargetBranch,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

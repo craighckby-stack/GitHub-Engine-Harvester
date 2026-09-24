@@ -158,6 +158,9 @@ export class EngineHarvester {
       autoSanitize: true,
       defaultBrandKeywords: ['deepseek', 'deepseek-ai', 'openai', 'microsoft', 'princeton-nlp', 'openhands'],
       outputDirectory: 'sanitized-engine-catalogue',
+      autoPushToGithub: false,
+      githubTargetBranch: 'main',
+      githubTargetDir: 'engines/',
       ...customConfig,
     };
 
@@ -197,6 +200,8 @@ export class EngineHarvester {
       totalErrorsRecovered: 0,
       totalCooldownMs: 0,
       currentActiveJobId: null,
+      totalPushedToGithub: 0,
+      recentPushes: [],
       currentCooldownTimer: {
         type: 'none',
         remainingMs: 0,
@@ -476,6 +481,88 @@ export class EngineHarvester {
       job.markdownOutput = generatedMd;
       job.currentStepMessage = `Successfully sanitized 3 engines into .md!`;
 
+      // Automated Push to GitHub Repository
+      if (this.config.autoPushToGithub && this.config.githubTargetRepo && this.config.githubToken) {
+        try {
+          job.currentStepMessage = `Auto-pushing files to GitHub: ${this.config.githubTargetRepo}...`;
+          this.notify();
+
+          const pushRes = await fetch('/api/github/push-engine-bundle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: this.config.githubToken,
+              repoFullName: this.config.githubTargetRepo,
+              branch: this.config.githubTargetBranch || 'main',
+              engineName: job.name,
+              markdownContent: generatedMd,
+              sourceRepo: job.repoFullName,
+            }),
+          });
+
+          if (pushRes.ok) {
+            const pushData: any = await pushRes.json();
+            const firstFile = pushData.pushedFiles?.[0];
+            const commitSha = firstFile?.commitSha || 'main';
+            const commitUrl = firstFile?.commitUrl || `https://github.com/${this.config.githubTargetRepo}`;
+
+            job.githubPushResult = {
+              success: true,
+              repo: this.config.githubTargetRepo,
+              branch: this.config.githubTargetBranch || 'main',
+              commitSha,
+              commitUrl,
+              filesCount: pushData.totalPushed || 2,
+              timestamp: Date.now(),
+            };
+
+            this.telemetry.totalPushedToGithub++;
+            this.telemetry.lastPushedCommit = {
+              repo: this.config.githubTargetRepo,
+              branch: this.config.githubTargetBranch || 'main',
+              commitSha,
+              commitUrl,
+              timestamp: Date.now(),
+            };
+
+            this.telemetry.recentPushes = [
+              {
+                id: `push-${Date.now()}-${job.name}`,
+                engineName: job.sanitizedTitle || job.name,
+                sourceRepo: job.repoFullName,
+                targetRepo: this.config.githubTargetRepo,
+                branch: this.config.githubTargetBranch || 'main',
+                commitSha,
+                commitUrl,
+                filesPushedCount: pushData.totalPushed || 2,
+                timestamp: Date.now(),
+                status: 'success',
+              },
+              ...this.telemetry.recentPushes.slice(0, 19),
+            ];
+
+            job.currentStepMessage = `Sanitized & auto-pushed to ${this.config.githubTargetRepo}!`;
+          } else {
+            const errData = await pushRes.json().catch(() => ({}));
+            job.githubPushResult = {
+              success: false,
+              repo: this.config.githubTargetRepo,
+              branch: this.config.githubTargetBranch || 'main',
+              error: errData.error || 'Failed to auto-push files to GitHub',
+              timestamp: Date.now(),
+            };
+          }
+        } catch (pushErr: any) {
+          job.githubPushResult = {
+            success: false,
+            repo: this.config.githubTargetRepo,
+            branch: this.config.githubTargetBranch || 'main',
+            error: pushErr.message || 'Auto-push network failure',
+            timestamp: Date.now(),
+          };
+        }
+      }
+
       // Record in Blacklist / Processed Database
       this.blacklist.set(job.repoFullName.toLowerCase(), {
         repoFullName: job.repoFullName,
@@ -495,10 +582,9 @@ export class EngineHarvester {
       this.notify();
     } catch (err: any) {
       // MASSIVE ERROR HANDLING & CIRCUIT BREAKER
-      console.warn(`[Harvester Resilience] Error on ${job.repoFullName}:`, err.message);
       this.telemetry.totalErrorsRecovered++;
       job.retryCount++;
-      job.lastError = err.message || 'Unknown network/parsing error';
+      job.lastError = err.message || 'Transient network recovery';
 
       if (job.retryCount <= this.config.maxRetriesPerRepo) {
         job.status = 'error_recovering';
