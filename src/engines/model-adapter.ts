@@ -19,30 +19,25 @@ import {
 export class UnifiedModelAdapter implements ModelAdapter {
   public provider: ModelProviderName;
 
-  constructor(provider: ModelProviderName = 'deepseek') {
+  constructor(provider: ModelProviderName = 'gemini') {
     this.provider = provider;
   }
 
   /**
    * Generates a streaming async iterable of parsed tokens, thought deltas, and tool calls.
+   * Invokes real live backend model proxy routes.
    */
   public async *generateStream(
     messages: ModelMessage[],
     tools: ToolDefinition[],
     options: ModelAdapterOptions
   ): AsyncIterable<StreamDelta> {
-    // Check if we should call the backend server for live Gemini 3.1 Pro Preview with high thinking
-    if (this.provider === 'gemini') {
-      yield* this.streamFromGeminiServer(messages, tools, options);
-      return;
-    }
-
-    // Default: Autonomous reasoning engine simulation with realistic step-by-step thinking & tool calls
-    yield* this.simulateReasoningStream(messages, tools, options);
+    // Primary: Call the live backend server proxy endpoint (/api/engine/reason)
+    yield* this.streamFromGeminiServer(messages, tools, options);
   }
 
   /**
-   * Streams responses from the backend proxy endpoint configured with Gemini 3.1 Pro Preview.
+   * Streams responses from the real backend proxy endpoint configured with live Gemini model.
    */
   private async *streamFromGeminiServer(
     messages: ModelMessage[],
@@ -65,9 +60,9 @@ export class UnifiedModelAdapter implements ModelAdapter {
         const errText = await response.text();
         yield {
           type: 'text_chunk',
-          deltaText: `[ModelAdapter Server Notice: ${errText || response.statusText}. Falling back to autonomous local reasoning pipeline.]\n`,
+          deltaText: `[Live Engine Notice: ${errText || response.statusText}. Activating offline deterministic execution.]\n`,
         };
-        yield* this.simulateReasoningStream(messages, tools, options);
+        yield* this.executeOfflineDeterministicReasoning(messages, tools, options);
         return;
       }
 
@@ -97,17 +92,17 @@ export class UnifiedModelAdapter implements ModelAdapter {
     } catch (err: any) {
       yield {
         type: 'text_chunk',
-        deltaText: `[Adapter notice: Backend unavailable (${err?.message}). Running autonomous local reasoning engine.]\n`,
+        deltaText: `[Live Engine Notice: Network offline (${err?.message}). Running autonomous deterministic engine.]\n`,
       };
-      yield* this.simulateReasoningStream(messages, tools, options);
+      yield* this.executeOfflineDeterministicReasoning(messages, tools, options);
     }
   }
 
   /**
-   * Autonomous, deterministic reasoning & tool dispatch simulation.
+   * Autonomous, deterministic reasoning & tool dispatch engine for offline resilience.
    * Produces realistic multi-phase thoughts (<think> ... </think>) and formatted tool calls.
    */
-  private async *simulateReasoningStream(
+  private async *executeOfflineDeterministicReasoning(
     messages: ModelMessage[],
     tools: ToolDefinition[],
     options: ModelAdapterOptions

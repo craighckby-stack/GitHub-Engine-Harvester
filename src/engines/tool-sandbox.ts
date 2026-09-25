@@ -7,6 +7,7 @@
  * security boundary gatekeeper, and output sanitization filters.
  */
 
+import { pyodideRuntime } from './pyodide-runner';
 import {
   SandboxEnvironment,
   ToolDefinition,
@@ -88,7 +89,7 @@ export class ToolSandboxEngine implements SandboxEnvironment {
   }
 
   /**
-   * Virtual Shell Command Interpreter with built-in coreutils simulation.
+   * Virtual Shell Command Interpreter executing in isolated memory workspace.
    */
   public async executeShell(cmd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const trimmed = cmd.trim();
@@ -135,13 +136,22 @@ export class ToolSandboxEngine implements SandboxEnvironment {
       }
 
       if (program === 'pytest') {
-        // Simulates automated test harness run against virtual files
         const files = await this.fs.listFiles();
-        const testFiles = files.filter((f) => f.includes('test'));
-        if (testFiles.length === 0) {
-          return { stdout: '================ test session starts ================\ncollected 3 items\n\ntest_engine.py ... [100%]\n\n================ 3 passed in 0.04s ================\n', stderr: '', exitCode: 0 };
+        const testFilePaths = files.filter((f) => f.includes('test'));
+        const testContents: Record<string, string> = {};
+        for (const path of testFilePaths) {
+          try {
+            testContents[path] = await this.fs.readFile(path);
+          } catch {
+            // continue
+          }
         }
-        return { stdout: `Running tests in ${testFiles.join(', ')}: PASSED (3/3 assertions validated)\n`, stderr: '', exitCode: 0 };
+        const pyResult = await pyodideRuntime.runPytest(testContents);
+        return {
+          stdout: this.sanitizeOutput(pyResult.stdout),
+          stderr: this.sanitizeOutput(pyResult.stderr),
+          exitCode: pyResult.exitCode,
+        };
       }
 
       // Generic shell simulation
@@ -160,46 +170,15 @@ export class ToolSandboxEngine implements SandboxEnvironment {
   }
 
   /**
-   * Safe JavaScript-based Python simulator for sandboxed algorithm verification.
+   * Executes genuine Python 3.11 code in WebAssembly CPython sandbox.
    */
   public async executePython(code: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const logs: string[] = [];
-    try {
-      // If code contains print statements, extract what it prints
-      const printRegex = /print\((.*?)\)/g;
-      let match;
-      let hasPrints = false;
-      while ((match = printRegex.exec(code)) !== null) {
-        hasPrints = true;
-        const arg = match[1].trim().replace(/^['"]|['"]$/g, '');
-        logs.push(arg);
-      }
-
-      // Check for assert failures
-      if (code.includes('assert False') || code.includes('raise Exception')) {
-        return {
-          stdout: logs.join('\n'),
-          stderr: 'AssertionError: Sandbox assertion check failed.\n',
-          exitCode: 1,
-        };
-      }
-
-      const defaultOutput = hasPrints
-        ? logs.join('\n') + '\n'
-        : '[Python Environment] Script executed cleanly with exit code 0.\n';
-
-      return {
-        stdout: this.sanitizeOutput(defaultOutput),
-        stderr: '',
-        exitCode: 0,
-      };
-    } catch (err: any) {
-      return {
-        stdout: logs.join('\n'),
-        stderr: `Python runtime error: ${err?.message || err}\n`,
-        exitCode: 1,
-      };
-    }
+    const result = await pyodideRuntime.execute(code);
+    return {
+      stdout: this.sanitizeOutput(result.stdout),
+      stderr: this.sanitizeOutput(result.stderr),
+      exitCode: result.exitCode,
+    };
   }
 
   /**

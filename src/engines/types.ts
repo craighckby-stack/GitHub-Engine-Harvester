@@ -74,7 +74,7 @@ export interface SpatiotemporalContext {
 // 2. Model Adapter & Stream Parsing Types
 // ---------------------------------------------------------------------------
 
-export type ModelProviderName = 'deepseek' | 'gemini' | 'openai' | 'anthropic' | 'mock';
+export type ModelProviderName = 'gemini' | 'deepseek' | 'openai' | 'anthropic';
 
 export interface ModelMessagePart {
   type: 'text' | 'thought' | 'tool_call' | 'tool_result' | 'image';

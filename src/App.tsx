@@ -53,6 +53,7 @@ import { CrawlJob, HarvesterTelemetry, BlacklistEntry } from './crawler/types';
 import { GitHubObservatory } from './crawler/GitHubObservatory';
 import { GitHubPushDialog } from './crawler/GitHubPushDialog';
 import { LicenseModal } from './components/LicenseModal';
+import { ManualRunStudio } from './components/ManualRunStudio';
 
 function safeStorageGet(key: string, defaultValue = ''): string {
   try {
@@ -77,7 +78,7 @@ function safeStorageSet(key: string, value: string): void {
 
 export default function App() {
   // Navigation
-  const [activeTab, setActiveTab] = useState<'harvester' | 'catalog' | 'markdown' | 'playground'>('harvester');
+  const [activeTab, setActiveTab] = useState<'harvester' | 'manual-run' | 'catalog' | 'markdown' | 'playground'>('harvester');
 
   // Harvester Instance & State
   const [harvester] = useState(() => new EngineHarvester());
@@ -121,6 +122,8 @@ export default function App() {
   const [isDiscoveringMore, setIsDiscoveringMore] = useState(false);
   const [discoverTopicInput, setDiscoverTopicInput] = useState('');
   const [unlimitedMode, setUnlimitedMode] = useState(true);
+  const [forceReRunBlacklist, setForceReRunBlacklist] = useState(false);
+  const [autoSanitize, setAutoSanitize] = useState(true);
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
 
   // GitHub Integration & Automated Push State
@@ -408,6 +411,38 @@ export default function App() {
     harvester.setUnlimitedDiscovery(enabled);
   };
 
+  const handleToggleForceReRunBlacklist = (enabled: boolean) => {
+    setForceReRunBlacklist(enabled);
+    harvester.setForceReRunBlacklist(enabled);
+  };
+
+  const handleToggleAutoSanitize = (enabled: boolean) => {
+    setAutoSanitize(enabled);
+    harvester.setAutoSanitize(enabled);
+  };
+
+  // Wipe mock data and re-run all blacklisted repos with live API endpoints
+  const handleWipeMockDataAndReRunAll = async () => {
+    harvester.wipeMockDataAndReQueueBlacklist();
+    setForceReRunBlacklist(true);
+    harvester.setForceReRunBlacklist(true);
+
+    if (!isHarvesterRunning) {
+      setIsHarvesterRunning(true);
+      setIsHarvesterPaused(false);
+      await harvester.startHarvester();
+      setIsHarvesterRunning(false);
+    }
+  };
+
+  // Re-queue single blacklisted repo for immediate live extraction
+  const handleReRunSingleRepo = (repoFullName: string) => {
+    harvester.reQueueSingleRepo(repoFullName);
+    if (!isHarvesterRunning) {
+      handleToggleHarvester();
+    }
+  };
+
   // Playground Execution
   const handleRunPlayground = async () => {
     setIsRunningPlayground(true);
@@ -496,6 +531,18 @@ export default function App() {
               {isHarvesterRunning && (
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
               )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('manual-run')}
+              className={`flex items-center space-x-2 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeTab === 'manual-run'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+              }`}
+            >
+              <Sliders className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Manual Run</span>
             </button>
 
             <button
@@ -620,6 +667,20 @@ export default function App() {
                       <Sparkles className="h-3 w-3 text-emerald-400" />
                       <span>{unlimitedMode ? '♾️ Unlimited Paging: Active' : 'Limited Mode'}</span>
                     </span>
+                    {forceReRunBlacklist && (
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono bg-amber-950/90 text-amber-300 border border-amber-700 animate-pulse">
+                        <ShieldAlert className="h-3 w-3 text-amber-400" />
+                        <span>Force Re-Run Blacklist Active</span>
+                      </span>
+                    )}
+                    <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono border ${
+                      autoSanitize
+                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}>
+                      <ShieldCheck className={`h-3 w-3 ${autoSanitize ? 'text-emerald-400' : 'text-slate-500'}`} />
+                      <span>Sanitizer: {autoSanitize ? 'ON' : 'OFF'}</span>
+                    </span>
                   </div>
                   <h2 className="text-xl font-bold tracking-tight text-white">
                     Unlimited Autonomous GitHub Engine Harvester &amp; Blacklist Filter
@@ -650,6 +711,41 @@ export default function App() {
                         <span>Start Full Automation</span>
                       </>
                     )}
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleAutoSanitize(!autoSanitize)}
+                    className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center space-x-1.5 ${
+                      autoSanitize
+                        ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/80 shadow-sm'
+                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                    title="Toggle clean-room brand sanitization ON or OFF (preserve authentic project branding when OFF)"
+                  >
+                    <ShieldCheck className={`h-3.5 w-3.5 ${autoSanitize ? 'text-emerald-400' : 'text-slate-400'}`} />
+                    <span>Sanitizer: {autoSanitize ? 'ON (Scrub Brand)' : 'OFF (Authentic)'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleForceReRunBlacklist(!forceReRunBlacklist)}
+                    className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center space-x-1.5 ${
+                      forceReRunBlacklist
+                        ? 'bg-amber-950/90 border-amber-500 text-amber-200 ring-1 ring-amber-500/80 shadow-sm'
+                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                    title="Toggle forced re-run of blacklisted repositories with real live API calls"
+                  >
+                    <ShieldAlert className={`h-3.5 w-3.5 ${forceReRunBlacklist ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
+                    <span>Re-Run Blacklist: {forceReRunBlacklist ? 'ON (Force Live)' : 'OFF'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleWipeMockDataAndReRunAll}
+                    className="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-md shadow-amber-950/50 transition-all cursor-pointer"
+                    title="Wipes mock/cached entries and immediately re-queues all blacklisted repositories for live API extraction"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 text-white" />
+                    <span>Wipe &amp; Re-Run All ({blacklistEntries.length} Repos)</span>
                   </button>
 
                   <button
@@ -1071,15 +1167,26 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="relative min-w-[220px]">
-                  <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-500" />
-                  <input
-                    type="text"
-                    value={blacklistSearch}
-                    onChange={(e) => setBlacklistSearch(e.target.value)}
-                    placeholder="Search blacklist..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                  />
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleWipeMockDataAndReRunAll}
+                    className="px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                    title="Wipes mock/cached entries and re-queues all blacklisted repositories for a fresh live API run"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Re-Queue All for Live Run</span>
+                  </button>
+
+                  <div className="relative min-w-[180px]">
+                    <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-500" />
+                    <input
+                      type="text"
+                      value={blacklistSearch}
+                      onChange={(e) => setBlacklistSearch(e.target.value)}
+                      placeholder="Search blacklist..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1105,6 +1212,14 @@ export default function App() {
                     </div>
 
                     <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleReRunSingleRepo(b.repoFullName)}
+                        title="Re-queue and immediately extract this repository using live API endpoints"
+                        className="px-2 py-1 rounded bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/80 text-[10px] font-mono flex items-center space-x-1 transition-colors cursor-pointer"
+                      >
+                        <Zap className="h-3 w-3 text-amber-400" />
+                        <span>Re-Run Live</span>
+                      </button>
                       <span className="text-[10px] text-slate-500">
                         {new Date(b.processedAt).toLocaleTimeString()}
                       </span>
@@ -1124,7 +1239,31 @@ export default function App() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: ENGINE CATALOGUE                                                  */}
+        {/* TAB 2: MANUAL RUN STUDIO                                                 */}
+        {/* ========================================================================= */}
+        {activeTab === 'manual-run' && (
+          <ManualRunStudio
+            onRunInPlayground={(markdown, name) => {
+              setCustomMarkdown(markdown);
+              setTaskPrompt(`Execute and verify the sanitized ${name} engine with autonomous ReAct cycle.`);
+              setActiveTab('playground');
+            }}
+            onAddToCatalogue={(newEntry) => {
+              setCatalogList((prev) => {
+                const filtered = prev.filter((p) => p.id !== newEntry.id);
+                return [newEntry, ...filtered];
+              });
+              setSelectedSystemId(newEntry.id);
+            }}
+            githubToken={githubToken}
+            githubTargetRepo={githubTargetRepo}
+            githubTargetBranch={githubTargetBranch}
+            githubTargetDir={githubTargetDir}
+          />
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: ENGINE CATALOGUE                                                  */}
         {/* ========================================================================= */}
         {activeTab === 'catalog' && (
           <div className="space-y-6">

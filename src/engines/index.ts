@@ -40,7 +40,7 @@ export function createHarnessSystem(options: {
   agentConfig?: Partial<AgentLoopConfig>;
 } = {}): HarnessSystemInstance {
   const kernel = createLifecycleKernel() as SpatiotemporalLifecycleContext;
-  const modelAdapter = new UnifiedModelAdapter(options.provider || 'deepseek');
+  const modelAdapter = new UnifiedModelAdapter(options.provider || 'gemini');
   const sandbox = new ToolSandboxEngine(options.initialFiles || {});
   const session = new SessionStateEngine();
   const agent = new AgentLoopEngine(kernel, modelAdapter, sandbox, session, options.agentConfig || {});

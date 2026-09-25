@@ -80,6 +80,7 @@ export interface HarvesterConfig {
   // Unlimited Dynamic Discovery Configurations
   unlimitedDiscovery: boolean; // default true: continuously queries and enqueues infinite repositories
   discoveryBatchSize: number; // default 20
+  forceReRunBlacklist?: boolean; // When true, re-runs all blacklisted repositories with real live API
   // Automated GitHub Repository Push Configurations
   autoPushToGithub: boolean;
   githubToken?: string;

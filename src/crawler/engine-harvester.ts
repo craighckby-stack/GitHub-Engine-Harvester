@@ -442,6 +442,71 @@ export class EngineHarvester {
     this.notify();
   }
 
+  public setForceReRunBlacklist(enabled: boolean) {
+    this.config.forceReRunBlacklist = enabled;
+    this.notify();
+  }
+
+  public setAutoSanitize(enabled: boolean) {
+    this.config.autoSanitize = enabled;
+    this.notify();
+  }
+
+  public getAutoSanitize(): boolean {
+    return this.config.autoSanitize;
+  }
+
+  /**
+   * Wipes any mock/cached data and resets all blacklisted & queued repositories
+   * into the active queue for a fresh, live API extraction run.
+   */
+  public wipeMockDataAndReQueueBlacklist(): { count: number; repos: string[] } {
+    const reposToReQueue: string[] = [];
+
+    // Clear blacklist entries so they are eligible for fresh live crawling
+    this.blacklist.clear();
+    this.telemetry.totalBlacklisted = 0;
+
+    // Reset all jobs in queue to 'queued' state for a fresh live API run
+    this.queue.forEach((job) => {
+      job.status = 'queued';
+      job.progressPercent = 0;
+      job.currentStepMessage = 'Queued for live API re-extraction';
+      job.retryCount = 0;
+      job.enginesFound = 0;
+      job.markdownOutput = undefined;
+      job.sanitizedTitle = undefined;
+      reposToReQueue.push(job.repoFullName);
+    });
+
+    this.telemetry.totalProcessed = 0;
+    this.telemetry.totalEnginesExtracted = 0;
+    this.notify();
+
+    return { count: reposToReQueue.length, repos: reposToReQueue };
+  }
+
+  /**
+   * Re-queues a single blacklisted repository for a priority live API extraction run.
+   */
+  public reQueueSingleRepo(repoFullName: string) {
+    const key = repoFullName.trim().toLowerCase();
+    this.blacklist.delete(key);
+    this.telemetry.totalBlacklisted = this.blacklist.size;
+
+    const job = this.queue.find((j) => j.repoFullName.toLowerCase() === key);
+    if (job) {
+      job.status = 'queued';
+      job.progressPercent = 0;
+      job.currentStepMessage = 'Re-queued for live API extraction';
+      job.retryCount = 0;
+    } else {
+      this.addRepositoryToQueue(repoFullName);
+    }
+
+    this.notify();
+  }
+
   public addRepositoryToQueue(repoUrl: string) {
     const cleanUrl = repoUrl.trim();
     let fullName = cleanUrl;
@@ -548,19 +613,21 @@ export class EngineHarvester {
     this.currentCancelToken = { cancelled: false };
 
     while (this.isRunning && !this.currentCancelToken.cancelled) {
-      // Find remaining queued eligible jobs not in blacklist
-      const remainingQueued = this.queue.filter(
-        (j) => j.status === 'queued' && !this.blacklist.has(j.repoFullName.toLowerCase())
-      );
+      // Find remaining queued eligible jobs (bypassing blacklist check if forceReRunBlacklist is active)
+      const isJobEligible = (j: CrawlJob) => {
+        if (j.status !== 'queued') return false;
+        if (this.config.forceReRunBlacklist) return true;
+        return !this.blacklist.has(j.repoFullName.toLowerCase());
+      };
+
+      const remainingQueued = this.queue.filter(isJobEligible);
 
       // Proactive replenishing: when queue has 4 or fewer pending jobs, fetch next batch
       if (this.config.unlimitedDiscovery && remainingQueued.length <= 4) {
         await this.autoExpandQueueAsync(this.config.discoveryBatchSize);
       }
 
-      const nextJob = this.queue.find(
-        (j) => j.status === 'queued' && !this.blacklist.has(j.repoFullName.toLowerCase())
-      );
+      const nextJob = this.queue.find(isJobEligible);
 
       if (!nextJob) {
         if (this.config.unlimitedDiscovery) {
@@ -622,8 +689,8 @@ export class EngineHarvester {
     job.currentStepMessage = `Checking blacklist & querying repository ${job.repoFullName}...`;
     this.notify();
 
-    // 1. Blacklist check
-    if (this.blacklist.has(job.repoFullName.toLowerCase())) {
+    // 1. Blacklist check (Bypassed if forceReRunBlacklist is active)
+    if (!this.config.forceReRunBlacklist && this.blacklist.has(job.repoFullName.toLowerCase())) {
       job.status = 'blacklisted';
       job.progressPercent = 100;
       job.currentStepMessage = 'Skipped: already recorded in blacklist';
@@ -653,12 +720,16 @@ export class EngineHarvester {
 
       job.status = 'sanitizing_engines';
       job.progressPercent = 65;
-      job.currentStepMessage = `Sanitizing vendor branding and assembling .md catalogue...`;
+      job.currentStepMessage = this.config.autoSanitize
+        ? `Sanitizing vendor branding and assembling .md catalogue...`
+        : `Extracting authentic runtime architecture (Sanitization OFF)...`;
       this.notify();
 
       // Perform extraction & sanitization via server engine API with resilient 20s timeout
-      const targetBrand = job.owner;
-      const genericName = `${job.name.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\s+/g, '')}RuntimeEngine`;
+      const targetBrand = this.config.autoSanitize ? job.owner : '';
+      const genericName = this.config.autoSanitize
+        ? `${job.name.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\s+/g, '')}RuntimeEngine`
+        : `${job.name}`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000);
@@ -672,7 +743,10 @@ export class EngineHarvester {
             repoUrl: job.url,
             targetBrand,
             genericBrand: genericName,
-            customInstructions: `Extract only core runtime engines from ${job.repoFullName}. Describe what each does and print complete sanitized code blocks.`,
+            sanitize: this.config.autoSanitize,
+            customInstructions: this.config.autoSanitize
+              ? `Extract only core runtime engines from ${job.repoFullName}. Cleanly sanitize vendor branding and describe what each does.`
+              : `Extract authentic core runtime engines from ${job.repoFullName}. Maintain original project names, branding, and architectural identifiers without sanitization.`,
           }),
         });
       } finally {

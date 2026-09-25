@@ -38,7 +38,15 @@ npm run dev
 
 ---
 
-## 1. System Architecture
+## 1. System Architecture & Workbench Tabs
+
+The application provides a comprehensive autonomous and interactive workbench:
+
+- **🎯 Manual Run Studio (New)**: Target any repository on demand. Select from curated presets (`LangGraph`, `AutoGPT`, `AutoGen`, `Open Interpreter`, `CrewAI`, `Aider`, `Browser-Use`, `LiteLLM`, `SmolAgents`, etc.) or search live GitHub repos, customize brand scrubbing parameters, set step cooldowns, and instantly synthesize clean-room specifications.
+- **⚡ Auto-Harvester**: Continuous autonomous crawler with cooldown timers anywhere, circuit-breaker safety, rate-limit backoff, and automated GitHub push.
+- **📚 Engine Catalogue**: Browse curated sanitized engine specifications, download full `.md` files, or export individual decoupled `.ts` engine components.
+- **📝 Inspect .md**: Rich Markdown viewer with raw source editing, syntax highlighting, and 1-click clipboard export.
+- **🧪 Live Engine Test Playground**: Execute live ReAct reasoning cycles on sanitized engines with in-memory sandbox and step inspection.
 
 ```
                        ┌─────────────────────────────────────────┐

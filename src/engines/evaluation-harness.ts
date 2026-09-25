@@ -16,6 +16,7 @@ import {
   BenchmarkTestCase,
   EvaluationMetric,
   HarnessSuiteResult,
+  ModelProviderName,
 } from './types';
 
 export class EvaluationHarnessEngine {
@@ -80,7 +81,7 @@ export class EvaluationHarnessEngine {
    */
   public async runTestCase(
     task: BenchmarkTestCase,
-    modelProvider: 'deepseek' | 'gemini' | 'mock' = 'deepseek',
+    modelProvider: ModelProviderName = 'gemini',
     onProgress?: (info: { step: number; thoughtChunk: string; textChunk: string }) => void
   ): Promise<{ metric: EvaluationMetric; trajectory: any[]; finalOutput: string }> {
     const startTime = Date.now();
@@ -162,7 +163,7 @@ export class EvaluationHarnessEngine {
   public async runFullSuite(
     suiteName = 'DeepSeek Harness Core Suite',
     tasks: BenchmarkTestCase[] = this.predefinedTasks,
-    modelProvider: 'deepseek' | 'gemini' | 'mock' = 'deepseek',
+    modelProvider: ModelProviderName = 'gemini',
     onTaskComplete?: (taskId: string, metric: EvaluationMetric) => void
   ): Promise<HarnessSuiteResult> {
     const results: Array<{ task: BenchmarkTestCase; metric: EvaluationMetric; trajectory: any[] }> = [];
