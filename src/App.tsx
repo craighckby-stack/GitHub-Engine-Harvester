@@ -43,6 +43,7 @@ import {
   GitCommit,
   FolderGit2,
   Globe,
+  Scale,
 } from 'lucide-react';
 
 import { CATALOG_ENTRIES, CatalogSystemEntry } from './catalog/catalog-data';
@@ -51,6 +52,7 @@ import { EngineHarvester } from './crawler/engine-harvester';
 import { CrawlJob, HarvesterTelemetry, BlacklistEntry } from './crawler/types';
 import { GitHubObservatory } from './crawler/GitHubObservatory';
 import { GitHubPushDialog } from './crawler/GitHubPushDialog';
+import { LicenseModal } from './components/LicenseModal';
 
 function safeStorageGet(key: string, defaultValue = ''): string {
   try {
@@ -119,6 +121,7 @@ export default function App() {
   const [isDiscoveringMore, setIsDiscoveringMore] = useState(false);
   const [discoverTopicInput, setDiscoverTopicInput] = useState('');
   const [unlimitedMode, setUnlimitedMode] = useState(true);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
 
   // GitHub Integration & Automated Push State
   const [autoPushEnabled, setAutoPushEnabled] = useState<boolean>(() => {
@@ -316,6 +319,7 @@ export default function App() {
         name: 'engine-harvester',
         version: '1.0.0',
         description: 'Automated GitHub repository crawler and engine sanitizer with blacklist and cooldown timers',
+        license: 'PolyForm-Noncommercial-1.0.0',
         main: 'harvester.ts',
         scripts: {
           start: 'ts-node harvester.ts',
@@ -323,7 +327,7 @@ export default function App() {
           'blacklist:list': 'ts-node harvester.ts --blacklist',
         },
         dependencies: {
-          '@google/genai': '^0.1.2',
+          '@google/genai': '^0.2.0',
         },
         devDependencies: {
           'ts-node': '^10.9.2',
@@ -336,9 +340,11 @@ export default function App() {
 
     const blacklistJson = JSON.stringify(harvester.getBlacklist(), null, 2);
 
-    const readmeMd = `# engine-harvester\n\nFull-automation GitHub engine crawler & sanitizer with persistent blacklist and cooldown timers anywhere.\n\n## Quick Start\n\`\`\`bash\nnpm install\nnpm start\n\`\`\`\n`;
+    const readmeMd = `# engine-harvester\n\nFull-automation GitHub engine crawler & sanitizer with persistent blacklist and cooldown timers anywhere.\n\n## License\nLicensed under PolyForm Noncommercial License 1.0.0 (Not-For-Profit & Research Use Only). See LICENSE for details.\n\n## Quick Start\n\`\`\`bash\nnpm install\nnpm start\n\`\`\`\n`;
 
-    const combinedBundle = `=== FILE: package.json ===\n${packageJson}\n\n=== FILE: blacklist.json ===\n${blacklistJson}\n\n=== FILE: README.md ===\n${readmeMd}\n`;
+    const licenseTxt = `POLYFORM NONCOMMERCIAL LICENSE (Version 1.0.0)\nNON-PROFIT & EDUCATIONAL RESEARCH USE ONLY\n\nCopyright (c) 2026 engine-harvester Contributors & Open-Source Research Community.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files, for Noncommercial and Not-For-Profit purposes only. Commercial exploitation, sale, or paid SaaS deployment is strictly prohibited.\n`;
+
+    const combinedBundle = `=== FILE: package.json ===\n${packageJson}\n\n=== FILE: LICENSE ===\n${licenseTxt}\n\n=== FILE: blacklist.json ===\n${blacklistJson}\n\n=== FILE: README.md ===\n${readmeMd}\n`;
     handleDownloadMarkdown(combinedBundle, 'engine-harvester-repo-bundle.txt');
   };
 
@@ -522,6 +528,16 @@ export default function App() {
             >
               <Terminal className="h-3.5 w-3.5" />
               <span>Live Engine Test</span>
+            </button>
+
+            <button
+              onClick={() => setIsLicenseModalOpen(true)}
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-md bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 transition-all cursor-pointer shadow-sm ml-1"
+              title="View Not-For-Profit & Research License terms"
+            >
+              <Scale className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Non-Profit License</span>
+              <span className="sm:hidden">License</span>
             </button>
           </nav>
         </div>
@@ -1661,9 +1677,28 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 text-center text-xs text-slate-500">
-        engine-harvester — Single-repository autonomous GitHub engine crawler, persistent blacklist, and sanitized Markdown catalogue.
+      <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <div>
+            engine-harvester — Autonomous GitHub engine crawler, persistent blacklist deduplication, and sanitized Markdown catalogue.
+          </div>
+          <div className="flex items-center space-x-3 text-[11px]">
+            <button
+              onClick={() => setIsLicenseModalOpen(true)}
+              className="flex items-center space-x-1.5 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer font-medium"
+            >
+              <Scale className="h-3.5 w-3.5" />
+              <span>License: PolyForm Noncommercial 1.0.0 (Not-For-Profit)</span>
+            </button>
+          </div>
+        </div>
       </footer>
+
+      {/* Non-Profit License Terms & Grant Modal */}
+      <LicenseModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+      />
 
       {/* Manual & Quick GitHub Push Dialog */}
       {pushDialogData && (

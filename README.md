@@ -393,3 +393,21 @@ npm start
 - `COOLDOWN_INTRA_REPO_MS`: Milliseconds between internal steps in one repository (default: `1500`)
 - `COOLDOWN_INTER_REPO_MS`: Milliseconds between consecutive repositories (default: `6000`)
 - `GEMINI_API_KEY`: API key for Gemini 3.1 Pro Preview high-thinking engine extraction
+
+---
+
+## ⚖️ License: Not-For-Profit & Research Use Only
+
+This project is licensed under the **PolyForm Noncommercial License 1.0.0** (Not-For-Profit & Research Open License).
+
+### Permissions:
+- ✅ **Non-Profit Organizations**: Free to use, adapt, and deploy for non-profit and charitable operations.
+- ✅ **Academic & Educational**: Free for university curricula, academic research, student laboratories, and teaching.
+- ✅ **Independent Researchers & Hobbyists**: Free for evaluation, benchmarking, experimentation, and security auditing.
+
+### Restrictions:
+- ❌ **No Commercial Exploitation**: You may not sell, rent, charge access fees, or offer paid commercial SaaS services using this software or generated engine bundles.
+- ❌ **No Commercial Paywalls**: All derivative artifacts must remain non-commercial.
+
+See the full [`LICENSE`](./LICENSE) and [`LICENSE.md`](./LICENSE.md) files for complete legal terms.
+

@@ -38,6 +38,7 @@ function generateAutonomousSanitizedEngine(repoUrl: string, targetBrand: string,
 *Sanitized Architectural Engine Specification & Complete Implementation Code*
 
 > **Sanitization Notice**: Synthesized by the engine harvester. All proprietary company branding and vendor-specific identifiers (${targetBrand}) have been sanitized into clean-room architectural components.
+> **License**: PolyForm Noncommercial 1.0.0 (Not-For-Profit & Research Use Only).
 
 ---
 
