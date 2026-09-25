@@ -2,6 +2,38 @@
 
 > **Autonomous GitHub Engine Crawler, Persistent Blacklist, Anywhere Cool-Down Timers & Clean-Room Markdown Engine Catalogue**
 
+---
+
+### 🔗 Live Preview Link
+🌐 **[https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app](https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app)**
+
+---
+
+### ⚡ Free Runnable
+
+This application is **100% free, open, and instantly runnable** in your web browser with zero configuration, and can also be run locally free of charge for non-profit and research purposes:
+
+#### Option 1: Instant Browser Execution (Zero Install)
+Click the preview link above to launch the full autonomous harvester workbench, explore sanitized agent runtime engines, and run live ReAct trajectories directly in the cloud:
+👉 **[Launch Free Live Web App](https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app)**
+
+#### Option 2: Local Free Runnable Quickstart
+```bash
+# 1. Clone the repository
+git clone https://github.com/engine-harvester/engine-harvester.git
+
+# 2. Navigate to project root
+cd engine-harvester
+
+# 3. Install dependencies
+npm install
+
+# 4. Launch development workbench (Free on localhost:3000)
+npm run dev
+```
+
+---
+
 `engine-harvester` is a single-repository, full-automation system engineered to crawl GitHub repositories, isolate **only the underlying runtime engines**, explain **what each engine does**, scrub all proprietary vendor branding (e.g., `deepseek`, `deepseek-ai`, `dsh`), and emit clean, production-grade `.md` specifications with complete implementation code.
 
 ---

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scale, CheckCircle2, XCircle, Copy, Check, Download, ShieldCheck, HeartHandshake, X } from 'lucide-react';
+import { Scale, CheckCircle2, XCircle, Copy, Check, Download, ShieldCheck, HeartHandshake, X, ExternalLink, Sparkles } from 'lucide-react';
 
 interface LicenseModalProps {
   isOpen: boolean;
@@ -143,12 +143,37 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({ isOpen, onClose }) =
               {/* Grant banner */}
               <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800/80 flex items-start space-x-3">
                 <HeartHandshake className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <h4 className="font-bold text-emerald-200 text-xs">Dedicated to Open Science &amp; Public Benefit</h4>
                   <p className="text-[11px] text-emerald-100/80 mt-0.5">
                     This software and all sanitized architectural specifications are provided free of charge for non-profit entities, academic institutions, and public interest exploration.
                   </p>
                 </div>
+              </div>
+
+              {/* Preview Link & Free Runnable Quick Access */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-indigo-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-indigo-300 text-xs">Live Preview Link</span>
+                    <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      <span>Free Runnable</span>
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-400 truncate max-w-md">
+                    https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app
+                  </div>
+                </div>
+                <a
+                  href="https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Launch Free Web App</span>
+                </a>
               </div>
 
               {/* What is Permitted vs Restricted */}

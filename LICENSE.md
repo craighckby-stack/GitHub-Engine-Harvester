@@ -6,6 +6,15 @@
 
 ---
 
+### 🔗 Live Preview Link
+🌐 **[https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app](https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app)**
+
+### ⚡ Free Runnable
+- **Web App**: Instantly runnable for free in browser with zero installation.
+- **Local Source**: Free to run locally for non-profit, educational, and academic research use.
+
+---
+
 ## 📜 Summary of Terms
 
 | Category | Status | Details |

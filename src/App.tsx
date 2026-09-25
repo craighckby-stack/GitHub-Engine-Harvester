@@ -464,6 +464,10 @@ export default function App() {
                 <span className="hidden md:inline-flex px-2 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700">
                   GitHub: 420M+ Repos
                 </span>
+                <span className="hidden lg:inline-flex items-center space-x-1 px-2 py-0.5 text-[10px] font-mono rounded bg-teal-950/80 text-teal-300 border border-teal-800">
+                  <Sparkles className="h-3 w-3 text-teal-400" />
+                  <span>Free Runnable</span>
+                </span>
                 {autoPushEnabled && (
                   <span className="hidden sm:inline-flex items-center space-x-1 px-2 py-0.5 text-[10px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
                     <UploadCloud className="h-3 w-3 text-emerald-400" />
@@ -1679,8 +1683,21 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <div>
-            engine-harvester — Autonomous GitHub engine crawler, persistent blacklist deduplication, and sanitized Markdown catalogue.
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+            <span>engine-harvester — Autonomous GitHub engine crawler, persistent blacklist deduplication, and sanitized Markdown catalogue.</span>
+            <a
+              href="https://ais-pre-mat3xh2gvcgbmatphxp3nf-483535245139.asia-southeast1.run.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono text-indigo-400 hover:text-indigo-300 bg-indigo-950/60 border border-indigo-800/60 transition-colors"
+            >
+              <ExternalLink className="h-3 w-3" />
+              <span>Live Preview Link</span>
+            </a>
+            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60">
+              <Sparkles className="h-3 w-3 text-emerald-400" />
+              <span>Free Runnable</span>
+            </span>
           </div>
           <div className="flex items-center space-x-3 text-[11px]">
             <button
