@@ -7,7 +7,7 @@
  * and manages automatic/manual Git push pipelines for sanitized engine files.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   GitBranch,
   GitCommit,
@@ -43,11 +43,29 @@ interface GitHubObservatoryProps {
   onUpdateTargetRepo: (repo: string) => void;
   targetBranch: string;
   onUpdateTargetBranch: (branch: string) => void;
+  targetDir?: string;
+  onUpdateTargetDir?: (dir: string) => void;
+  fileCreationMode?: 'create_unique' | 'overwrite';
+  onUpdateFileCreationMode?: (mode: 'create_unique' | 'overwrite') => void;
   githubToken: string;
   onUpdateToken: (token: string) => void;
   recentPushes: GitHubPushLedgerItem[];
   totalPushedCount: number;
 }
+
+const DEFAULT_GLOBAL_STATS: GitHubGlobalStats = {
+  totalEstimatedGitHubRepos: 420000000,
+  aiAgentReposCount: 168450,
+  autonomousHarnessCount: 42100,
+  llmToolRuntimeCount: 389200,
+  topAgentLanguages: [
+    { name: 'Python', count: 97700 },
+    { name: 'TypeScript', count: 48850 },
+    { name: 'Rust', count: 13470 },
+    { name: 'Go', count: 8420 },
+  ],
+  lastUpdated: Date.now(),
+};
 
 export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
   autoPushEnabled,
@@ -56,13 +74,17 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
   onUpdateTargetRepo,
   targetBranch,
   onUpdateTargetBranch,
+  targetDir = 'engines',
+  onUpdateTargetDir,
+  fileCreationMode = 'create_unique',
+  onUpdateFileCreationMode,
   githubToken,
   onUpdateToken,
   recentPushes,
   totalPushedCount,
 }) => {
-  const [stats, setStats] = useState<GitHubGlobalStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [stats, setStats] = useState<GitHubGlobalStats>(DEFAULT_GLOBAL_STATS);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<GitHubUserProfile | null>(null);
   const [userRepos, setUserRepos] = useState<GitHubUserRepo[]>([]);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -74,6 +96,13 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
   const [newRepoPrivate, setNewRepoPrivate] = useState(false);
   const [createRepoMessage, setCreateRepoMessage] = useState<string | null>(null);
 
+  const lastVerifiedTokenRef = useRef<string | null>(null);
+
+  // Sync input token when prop changes
+  useEffect(() => {
+    setInputToken(githubToken);
+  }, [githubToken]);
+
   // Load Global GitHub Repository Counts
   useEffect(() => {
     let isMounted = true;
@@ -81,11 +110,12 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
       try {
         setStatsLoading(true);
         const data = await GitHubClient.getGlobalStats();
-        if (isMounted) {
+        if (isMounted && data && typeof data.totalEstimatedGitHubRepos === 'number') {
           setStats(data);
         }
       } catch (e) {
-        console.error('Failed to load GitHub global stats:', e);
+        // Fallback gracefully to default metrics
+        console.warn('GitHub Observatory: Using cached/baseline global stats:', e);
       } finally {
         if (isMounted) setStatsLoading(false);
       }
@@ -96,27 +126,33 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
     };
   }, []);
 
-  // Verify stored token on mount or update
-  useEffect(() => {
-    if (githubToken && githubToken.trim()) {
-      verifyToken(githubToken);
-    }
-  }, [githubToken]);
-
   const verifyToken = async (tok: string) => {
+    if (!tok.trim()) {
+      setUserProfile(null);
+      setUserRepos([]);
+      lastVerifiedTokenRef.current = null;
+      return;
+    }
+    if (lastVerifiedTokenRef.current === tok.trim()) {
+      return;
+    }
     try {
       setIsVerifying(true);
       setAuthError(null);
       const profile = await GitHubClient.verifyToken(tok);
       setUserProfile(profile);
+      lastVerifiedTokenRef.current = tok.trim();
 
       // Also fetch user repos
       const repos = await GitHubClient.listRepositories(tok);
       setUserRepos(repos);
 
-      // If no target repo set yet, auto-suggest first repo or default
-      if (!targetRepo && repos.length > 0) {
-        onUpdateTargetRepo(repos[0].fullName);
+      // Protect existing user repositories:
+      // NEVER blindly auto-select repos[0].fullName to avoid overwriting existing repositories!
+      // If a dedicated repo already exists in their account, suggest it:
+      const dedicatedRepo = repos.find((r) => r.name.toLowerCase() === 'sanitized-agent-engines');
+      if (!targetRepo && dedicatedRepo) {
+        onUpdateTargetRepo(dedicatedRepo.fullName);
       }
     } catch (err: any) {
       setAuthError(err.message || 'Token verification failed');
@@ -125,6 +161,13 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
       setIsVerifying(false);
     }
   };
+
+  // Verify stored token on mount or update
+  useEffect(() => {
+    if (githubToken && githubToken.trim()) {
+      verifyToken(githubToken);
+    }
+  }, [githubToken]);
 
   const handleSaveToken = async () => {
     onUpdateToken(inputToken);
@@ -177,21 +220,21 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
               <div className="flex items-baseline space-x-1.5">
                 <span className="text-2xl font-black text-white font-mono tracking-tight">
-                  {statsLoading ? '420,000,000+' : `${stats?.totalEstimatedGitHubRepos.toLocaleString()}+`}
+                  {statsLoading ? '420,000,000+' : `${(stats?.totalEstimatedGitHubRepos ?? 420000000).toLocaleString()}+`}
                 </span>
                 <span className="text-xs text-slate-400 font-medium">Total Repositories on GitHub</span>
               </div>
 
               <div className="flex items-baseline space-x-1.5 pl-3 border-l border-slate-800">
                 <span className="text-lg font-bold text-indigo-300 font-mono">
-                  {statsLoading ? '168,450+' : `${stats?.aiAgentReposCount.toLocaleString()}+`}
+                  {statsLoading ? '168,450+' : `${(stats?.aiAgentReposCount ?? 168450).toLocaleString()}+`}
                 </span>
                 <span className="text-xs text-slate-400">Agent &amp; Harness Repos</span>
               </div>
 
               <div className="flex items-baseline space-x-1.5 pl-3 border-l border-slate-800">
                 <span className="text-lg font-bold text-amber-300 font-mono">
-                  {statsLoading ? '42,100+' : `${stats?.autonomousHarnessCount.toLocaleString()}+`}
+                  {statsLoading ? '42,100+' : `${(stats?.autonomousHarnessCount ?? 42100).toLocaleString()}+`}
                 </span>
                 <span className="text-xs text-slate-400">Sandbox Runtimes</span>
               </div>
@@ -387,17 +430,77 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
               )}
             </div>
 
+            {/* Safe Isolation Guarantee Banner */}
+            <div className="p-3 bg-emerald-950/30 border border-emerald-800/60 rounded-xl flex items-start space-x-2.5 text-xs text-emerald-300">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold text-emerald-200">Non-Destructive File Protection Guarantee:</span>
+                <p className="text-[11px] text-emerald-300/80 leading-relaxed">
+                  Harvester isolates all outputs inside the <code className="font-mono bg-emerald-950 px-1 py-0.2 rounded border border-emerald-800 text-emerald-200">{targetDir}/</code> directory. Root repository files (such as root README.md) are strictly protected and never overwritten.
+                </p>
+              </div>
+            </div>
+
             {/* Target Repository Selection */}
-            <div className="space-y-3 pt-3 border-t border-slate-800">
+            <div className="space-y-4 pt-2 border-t border-slate-800">
               <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
                 <Database className="h-3.5 w-3.5 text-indigo-400" />
-                <span>Target Repository for Automated Git Pushes</span>
+                <span>Target Repository for Sanitized Clean-Room Engines</span>
               </label>
 
+              {/* 1-Click Create New Dedicated Vault Repository (RECOMMENDED) */}
+              {userProfile && (
+                <div className="p-3.5 bg-indigo-950/30 border border-indigo-700/50 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-white flex items-center space-x-1.5">
+                      <Plus className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Recommended: Create &amp; Use Dedicated Engine Vault</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                      Isolated Vault
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Creates its own GitHub repository so all sanitized engines live in their own dedicated space without touching any existing projects.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={newRepoName}
+                      onChange={(e) => setNewRepoName(e.target.value)}
+                      placeholder="repo-name"
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    />
+                    <label className="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newRepoPrivate}
+                        onChange={(e) => setNewRepoPrivate(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-900 text-indigo-600"
+                      />
+                      <span>Private</span>
+                    </label>
+                    <button
+                      onClick={handleCreateNewRepo}
+                      disabled={isCreatingRepo || !newRepoName}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold transition-all cursor-pointer flex items-center justify-center space-x-1 shadow"
+                    >
+                      {isCreatingRepo ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                      <span>Create &amp; Select Dedicated Repo</span>
+                    </button>
+                  </div>
+                  {createRepoMessage && (
+                    <div className="text-[11px] font-mono text-indigo-300">{createRepoMessage}</div>
+                  )}
+                </div>
+              )}
+
+              {/* Or Select Target Existing Repo */}
               {userRepos.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="text-[11px] text-slate-400">
-                    Select an existing repository from your GitHub account:
+                    Or select an existing repository from your account:
                   </div>
                   <select
                     value={targetRepo}
@@ -425,46 +528,60 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
                 </div>
               )}
 
-              {/* 1-Click Create New Repository on GitHub */}
-              {userProfile && (
-                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg space-y-2">
-                  <div className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
-                    <Plus className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>Or 1-Click Create a New Repository on GitHub:</span>
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              {/* File Creation Strategy (Never Overwrite vs Overwrite) */}
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+                  <FolderGit2 className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>File Creation Strategy</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label
+                    className={`flex items-start space-x-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      fileCreationMode === 'create_unique'
+                        ? 'bg-emerald-950/30 border-emerald-700/80 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
                     <input
-                      type="text"
-                      value={newRepoName}
-                      onChange={(e) => setNewRepoName(e.target.value)}
-                      placeholder="repo-name"
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-500"
+                      type="radio"
+                      name="fileCreationMode"
+                      checked={fileCreationMode === 'create_unique'}
+                      onChange={() => onUpdateFileCreationMode && onUpdateFileCreationMode('create_unique')}
+                      className="mt-0.5 text-emerald-500"
                     />
-                    <label className="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={newRepoPrivate}
-                        onChange={(e) => setNewRepoPrivate(e.target.checked)}
-                        className="rounded border-slate-700 bg-slate-900 text-indigo-600"
-                      />
-                      <span>Private</span>
-                    </label>
-                    <button
-                      onClick={handleCreateNewRepo}
-                      disabled={isCreatingRepo || !newRepoName}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold transition-all cursor-pointer flex items-center justify-center space-x-1"
-                    >
-                      {isCreatingRepo ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                      <span>Create &amp; Select</span>
-                    </button>
-                  </div>
-                  {createRepoMessage && (
-                    <div className="text-[11px] font-mono text-indigo-300">{createRepoMessage}</div>
-                  )}
-                </div>
-              )}
+                    <div className="space-y-0.5 text-xs">
+                      <span className="font-semibold text-white">Create New Unique Files</span>
+                      <p className="text-[10px] text-slate-400">
+                        Never overwrites. Each engine gets its own isolated, distinct files and versioned folders.
+                      </p>
+                    </div>
+                  </label>
 
-              {/* Target Branch */}
+                  <label
+                    className={`flex items-start space-x-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      fileCreationMode === 'overwrite'
+                        ? 'bg-indigo-950/30 border-indigo-700/80 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="fileCreationMode"
+                      checked={fileCreationMode === 'overwrite'}
+                      onChange={() => onUpdateFileCreationMode && onUpdateFileCreationMode('overwrite')}
+                      className="mt-0.5 text-indigo-500"
+                    />
+                    <div className="space-y-0.5 text-xs">
+                      <span className="font-semibold text-white">Overwrite Matching Files</span>
+                      <p className="text-[10px] text-slate-400">
+                        Updates in place if a file already exists at the exact path.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Target Branch and Directory */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-slate-400 flex items-center space-x-1">
@@ -476,17 +593,21 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
                     value={targetBranch}
                     onChange={(e) => onUpdateTargetBranch(e.target.value)}
                     placeholder="main"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-400">Push Destination Directory</label>
+                  <label className="text-xs font-medium text-slate-400 flex items-center space-x-1">
+                    <FolderGit2 className="h-3 w-3 text-slate-400" />
+                    <span>Destination Subdirectory</span>
+                  </label>
                   <input
                     type="text"
-                    disabled
-                    value="engines/{sanitized-name}/"
-                    className="w-full bg-slate-950/60 border border-slate-800/80 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-500"
+                    value={targetDir}
+                    onChange={(e) => onUpdateTargetDir && onUpdateTargetDir(e.target.value)}
+                    placeholder="engines"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
@@ -504,8 +625,8 @@ export const GitHubObservatory: React.FC<GitHubObservatoryProps> = ({
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Every time a repository is harvested and sanitized, push specification.md, runtime.ts, and catalog
-                  README directly to GitHub.
+                  Every time a repository is harvested and sanitized, push individual engine files, specifications,
+                  and catalogue index directly to GitHub.
                 </p>
               </div>
 

@@ -46,6 +46,8 @@ export const GitHubPushDialog: React.FC<GitHubPushDialogProps> = ({
 }) => {
   const [targetRepo, setTargetRepo] = useState(defaultTargetRepo);
   const [branch, setBranch] = useState(defaultBranch || 'main');
+  const [targetDir, setTargetDir] = useState('engines');
+  const [writeMode, setWriteMode] = useState<'create_unique' | 'overwrite'>('create_unique');
   const [token, setToken] = useState(githubToken);
   const [isPushing, setIsPushing] = useState(false);
   const [pushResult, setPushResult] = useState<BundlePushResult | null>(null);
@@ -74,7 +76,9 @@ export const GitHubPushDialog: React.FC<GitHubPushDialogProps> = ({
         engineName,
         markdownContent,
         sourceRepo,
-        branch
+        branch,
+        targetDir,
+        writeMode
       );
 
       setPushResult(res);
@@ -92,7 +96,7 @@ export const GitHubPushDialog: React.FC<GitHubPushDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-5">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
@@ -100,7 +104,7 @@ export const GitHubPushDialog: React.FC<GitHubPushDialogProps> = ({
               <h3 className="text-lg font-bold text-white">Push Engine Files to GitHub</h3>
             </div>
             <p className="text-xs text-slate-400">
-              Commit sanitized engine specification and code files directly to your GitHub repository.
+              Commit isolated engine specifications and clean-room runtime code directly to GitHub.
             </p>
           </div>
           <button
@@ -111,21 +115,34 @@ export const GitHubPushDialog: React.FC<GitHubPushDialogProps> = ({
           </button>
         </div>
 
-        {/* Engine details */}
-        <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+        {/* Engine details and files preview */}
+        <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-white">{engineName}</span>
             <span className="text-[10px] font-mono text-indigo-400">Source: {sourceRepo || 'Autonomous'}</span>
           </div>
-          <div className="text-[11px] text-slate-400 flex items-center space-x-3 pt-1">
-            <span className="flex items-center space-x-1">
-              <FileText className="h-3 w-3 text-amber-400" />
-              <code className="font-mono text-[10px]">engines/{cleanSlug}/specification.md</code>
-            </span>
-            <span className="flex items-center space-x-1">
-              <FileCode className="h-3 w-3 text-indigo-400" />
-              <code className="font-mono text-[10px]">engines/{cleanSlug}/runtime.ts</code>
-            </span>
+          <div className="text-[11px] text-slate-400 space-y-1 pt-1">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              Files that will be created in <span className="font-mono text-emerald-300">{targetDir}/{cleanSlug}/</span>:
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-mono text-[10px]">
+              <span className="flex items-center space-x-1 text-slate-300">
+                <FileText className="h-3 w-3 text-amber-400" />
+                <span>specification.md</span>
+              </span>
+              <span className="flex items-center space-x-1 text-slate-300">
+                <FileCode className="h-3 w-3 text-indigo-400" />
+                <span>runtime.ts &amp; index.ts</span>
+              </span>
+              <span className="flex items-center space-x-1 text-slate-300">
+                <FileCode className="h-3 w-3 text-emerald-400" />
+                <span>01-*.ts, 02-*.ts (Individual engines)</span>
+              </span>
+              <span className="flex items-center space-x-1 text-slate-300">
+                <FileText className="h-3 w-3 text-sky-400" />
+                <span>{targetDir}/CATALOG.md</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -142,18 +159,73 @@ export const GitHubPushDialog: React.FC<GitHubPushDialogProps> = ({
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1">
-              <GitBranch className="h-3.5 w-3.5 text-slate-400" />
-              <span>Target Branch</span>
-            </label>
-            <input
-              type="text"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              placeholder="main"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-            />
+          {/* File Creation Mode */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300">File Creation Mode</label>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <label
+                className={`p-2 rounded-lg border cursor-pointer ${
+                  writeMode === 'create_unique'
+                    ? 'bg-emerald-950/40 border-emerald-700 text-white'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="dialogWriteMode"
+                  checked={writeMode === 'create_unique'}
+                  onChange={() => setWriteMode('create_unique')}
+                  className="mr-1.5 text-emerald-500"
+                />
+                <span className="font-semibold text-emerald-200">Create New Unique Files</span>
+                <p className="text-[10px] text-slate-400 mt-0.5">Never overwrites existing files</p>
+              </label>
+
+              <label
+                className={`p-2 rounded-lg border cursor-pointer ${
+                  writeMode === 'overwrite'
+                    ? 'bg-indigo-950/40 border-indigo-700 text-white'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="dialogWriteMode"
+                  checked={writeMode === 'overwrite'}
+                  onChange={() => setWriteMode('overwrite')}
+                  className="mr-1.5 text-indigo-500"
+                />
+                <span className="font-semibold text-white">Overwrite Existing</span>
+                <p className="text-[10px] text-slate-400 mt-0.5">Updates in-place if matched</p>
+              </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1">
+                <GitBranch className="h-3.5 w-3.5 text-slate-400" />
+                <span>Target Branch</span>
+              </label>
+              <input
+                type="text"
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+                placeholder="main"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-300">Destination Directory</label>
+              <input
+                type="text"
+                value={targetDir}
+                onChange={(e) => setTargetDir(e.target.value)}
+                placeholder="engines"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
           </div>
 
           {!githubToken && (

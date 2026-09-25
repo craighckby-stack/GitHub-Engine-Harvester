@@ -13,10 +13,43 @@ export default defineConfig(() => {
       {
         name: 'dsh-engine-server-middleware',
         configureServer(server) {
+          // Safeguard Vite Node process against unexpected network or socket terminations
+          process.on('unhandledRejection', (reason) => {
+            console.warn('[Server Middleware] Intercepted unhandled rejection:', reason);
+          });
+          process.on('uncaughtException', (err) => {
+            console.warn('[Server Middleware] Intercepted uncaught exception:', err);
+          });
+
           server.middlewares.use((req, res, next) => {
-            handleGitHubApi(req, res, () => {
-              handleEngineApi(req, res, next);
-            });
+            const url = req.url || '';
+            if (url.startsWith('/api/github/')) {
+              handleGitHubApi(req, res, next).catch((err) => {
+                console.error('[GitHub API Handler Error]:', err);
+                if (!res.headersSent && !res.writableEnded) {
+                  res.setHeader('Content-Type', 'application/json');
+                  res.writeHead(500);
+                  res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                } else {
+                  next(err);
+                }
+              });
+            } else if (url.startsWith('/api/engine/')) {
+              try {
+                handleEngineApi(req, res, next);
+              } catch (innerErr) {
+                console.error('[Engine API Handler Error]:', innerErr);
+                if (!res.headersSent && !res.writableEnded) {
+                  res.setHeader('Content-Type', 'application/json');
+                  res.writeHead(500);
+                  res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                } else {
+                  next(innerErr);
+                }
+              }
+            } else {
+              next();
+            }
           });
         },
       },

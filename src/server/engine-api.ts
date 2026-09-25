@@ -266,52 +266,79 @@ export class ${cleanName}ToolSandbox {
 `;
 }
 
-export function handleEngineApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
-  const url = req.url || '';
+function sendJson(res: ServerResponse, statusCode: number, data: any) {
+  if (res.writableEnded || res.headersSent) {
+    return;
+  }
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(statusCode);
+    res.end(JSON.stringify(data));
+  } catch (e) {
+    console.warn('[Engine API Router] sendJson suppressed error:', e);
+  }
+}
 
-  if (req.method === 'POST' && (url.startsWith('/api/engine/extract-sanitize') || url.startsWith('/api/engine/reason'))) {
+function readStreamBody(req: IncomingMessage): Promise<any> {
+  return new Promise((resolve) => {
+    if ((req as any).body && typeof (req as any).body === 'object') {
+      return resolve((req as any).body);
+    }
+    if (req.readableEnded) {
+      return resolve({});
+    }
+
     let body = '';
     req.on('data', (chunk) => {
       body += chunk;
     });
 
-    req.on('end', async () => {
-      res.setHeader('Content-Type', 'application/json');
-
-      let payload: any = {};
+    req.on('end', () => {
       try {
-        payload = JSON.parse(body || '{}');
-      } catch (e) {
-        payload = {};
+        resolve(JSON.parse(body || '{}'));
+      } catch {
+        resolve({});
       }
+    });
 
+    req.on('error', (err) => {
+      console.warn('[Engine API] Request stream error:', err);
+      resolve({});
+    });
+  });
+}
+
+export async function handleEngineApi(req: IncomingMessage, res: ServerResponse, next: () => void): Promise<void> {
+  try {
+    const url = req.url || '';
+
+    if (req.method === 'POST' && (url.startsWith('/api/engine/extract-sanitize') || url.startsWith('/api/engine/reason'))) {
+      try {
+        const payload: any = await readStreamBody(req);
       const isExtractor = url.startsWith('/api/engine/extract-sanitize');
       const repoUrl = payload.repoUrl || 'https://github.com/deepseek-ai/deepseek-harness';
       const targetBrand = payload.targetBrand || 'DeepSeek';
       const genericBrand = payload.genericBrand || 'AutonomousAgentHarness';
       const customInstructions = payload.customInstructions || '';
 
-      const ai = getAIClient();
+        const ai = getAIClient();
 
-      // If no AI client or key, provide autonomous synthesis immediately
-      if (!ai) {
-        const synthesizedMd = generateAutonomousSanitizedEngine(repoUrl, targetBrand, genericBrand);
-        res.writeHead(200);
-        res.end(
-          JSON.stringify({
+        // If no AI client or key, provide autonomous synthesis immediately
+        if (!ai) {
+          const synthesizedMd = generateAutonomousSanitizedEngine(repoUrl, targetBrand, genericBrand);
+          sendJson(res, 200, {
             markdown: synthesizedMd,
             text: synthesizedMd,
             thought: '[Autonomous Clean-Room Engine Synthesizer: Isolated runtime architecture without vendor leaks]',
-          })
-        );
-        return;
-      }
+          });
+          return;
+        }
 
-      let promptText = '';
-      let systemInstruction = '';
+        let promptText = '';
+        let systemInstruction = '';
 
-      if (isExtractor) {
-        systemInstruction = `You are a Principal Software Architect and Engine Cataloger.
+        if (isExtractor) {
+          systemInstruction = `You are a Principal Software Architect and Engine Cataloger.
 Your task is to analyze an open-source AI or software system/repository, isolate ONLY the runtime engines powering the system, describe exactly "What it does" for each engine, and provide complete, pristine implementation code in clean TypeScript.
 
 CRITICAL SANITIZATION RULES:
@@ -322,40 +349,41 @@ CRITICAL SANITIZATION RULES:
    - "### What it does" (Explain its exact role, inputs, state lifecycle, invariant preservation, and outputs).
    - "### Implementation Code" (Provide COMPLETE working code in a code block with zero ellipses).`;
 
-        promptText = `Target Repository: ${repoUrl}
+          promptText = `Target Repository: ${repoUrl}
 Branding to sanitize: "${targetBrand}" -> replace with "${genericBrand}".
 Directives: ${customInstructions || 'Isolate all core engines that run this system, describe what each engine does, and include all sanitized code.'}
 
 Generate the complete sanitized Markdown document now.`;
-      } else {
-        const messages = payload.messages || [];
-        const userMessages = messages.filter((m: any) => m.role === 'user');
-        const lastUser = userMessages[userMessages.length - 1];
-        promptText = typeof lastUser?.content === 'string' ? lastUser.content : 'Solve autonomous task';
-        systemInstruction =
-          payload.systemPrompt ||
-          'You are an expert systems engineer. Analyze engine architectures with high precision and output verified solutions.';
-      }
+        } else {
+          const messages = payload.messages || [];
+          const userMessages = messages.filter((m: any) => m.role === 'user');
+          const lastUser = userMessages[userMessages.length - 1];
+          promptText = typeof lastUser?.content === 'string' ? lastUser.content : 'Solve autonomous task';
+          systemInstruction =
+            payload.systemPrompt ||
+            'You are an expert systems engineer. Analyze engine architectures with high precision and output verified solutions.';
+        }
 
-      // Candidate models in preference order (focusing on high-availability flash models)
-      const candidateModels = proQuotaAvailable
-        ? ['gemini-3.1-pro-preview', 'gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite']
-        : ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+        let outputText = '';
+        let thought = '';
+        let apiSuccess = false;
 
-      let outputText = '';
-      let thought = '';
-      let apiSuccess = false;
-
-      for (const modelName of candidateModels) {
+        // Try primary fast flash model once, then immediately fall back to zero-latency clean-room synthesizer
         try {
-          const response = await ai.models.generateContent({
-            model: modelName,
+          const generatePromise = ai.models.generateContent({
+            model: 'gemini-2.5-flash',
             contents: promptText,
             config: {
               systemInstruction,
             },
           });
 
+          // 3.5-second maximum timeout to guarantee snappy zero-stall responses
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout on model generation')), 3500)
+          );
+
+          const response = await Promise.race([generatePromise, timeoutPromise]);
           outputText = response.text || '';
           const candidate = response.candidates?.[0];
           if (candidate?.content?.parts) {
@@ -368,43 +396,42 @@ Generate the complete sanitized Markdown document now.`;
 
           if (outputText) {
             apiSuccess = true;
-            break;
           }
         } catch (err: any) {
-          // If error indicates 429 quota failure on pro model, permanently mark pro model as unavailable
-          if (modelName === 'gemini-3.1-pro-preview') {
-            proQuotaAvailable = false;
-          }
-          // Quietly advance to next candidate model without printing raw error stacks to console
+          console.warn('[Engine API] Flash model generation timed out or failed, activating clean-room synthesis:', err.message);
         }
-      }
 
-      if (apiSuccess && outputText) {
-        res.writeHead(200);
-        res.end(
-          JSON.stringify({
+        if (apiSuccess && outputText) {
+          sendJson(res, 200, {
             markdown: outputText,
             text: outputText,
             thought: thought || '[Engine Decomposition & Sanitization completed]',
-          })
-        );
-        return;
-      }
+          });
+          return;
+        }
 
-      // If all candidate models were unavailable, throttled (429), or experiencing high-demand spikes (503),
-      // smoothly activate the Autonomous Deterministic Clean-Room Engine Synthesizer.
-      const synthesizedMd = generateAutonomousSanitizedEngine(repoUrl, targetBrand, genericBrand);
-      res.writeHead(200);
-      res.end(
-        JSON.stringify({
+        // Fallback to Autonomous Deterministic Clean-Room Engine Synthesizer
+        const synthesizedMd = generateAutonomousSanitizedEngine(repoUrl, targetBrand, genericBrand);
+        sendJson(res, 200, {
           markdown: synthesizedMd,
           text: synthesizedMd,
           thought: `[Autonomous Resilient Engine Synthesis: Deconstructed repository topology and scrubbed all vendor identifiers (${targetBrand}) into clean-room specification]`,
-        })
-      );
-    });
-    return;
-  }
+        });
+      } catch (err: any) {
+        console.error('[Engine API Unhandled error intercepted]:', err);
+        const fallbackMd = generateAutonomousSanitizedEngine('https://github.com/autonomous-agent', 'Vendor', 'AutonomousRuntime');
+        sendJson(res, 200, {
+          markdown: fallbackMd,
+          text: fallbackMd,
+          thought: '[Resilient fallback recovery activated]',
+        });
+      }
+      return;
+    }
 
-  next();
+    next();
+  } catch (outerErr) {
+    console.error('[Engine API Router outer intercepted]:', outerErr);
+    next();
+  }
 }

@@ -51,6 +51,7 @@ export interface PushResult {
   fileUrl?: string;
   timestamp: number;
   error?: string;
+  writeMode?: 'create_unique' | 'overwrite';
 }
 
 export interface BundlePushResult {
@@ -58,12 +59,16 @@ export interface BundlePushResult {
   repo: string;
   branch: string;
   engineName: string;
+  targetDirectory?: string;
+  writeMode?: 'create_unique' | 'overwrite';
   pushedFiles: {
     path: string;
     commitSha: string;
     commitUrl: string;
     fileUrl: string;
+    description?: string;
   }[];
+  catalogPath?: string;
   totalPushed: number;
   timestamp: number;
   error?: string;
@@ -116,6 +121,44 @@ export const GitHubClient = {
   },
 
   /**
+   * Dynamically discover repositories from GitHub across agentic topics
+   * Supports unlimited discovery paging through real GitHub targets
+   */
+  async discoverRepositories(params: {
+    page?: number;
+    perPage?: number;
+    topic?: string;
+    token?: string;
+  } = {}): Promise<{
+    page: number;
+    perPage: number;
+    totalCount: number;
+    liveSearch: boolean;
+    repositories: {
+      repoFullName: string;
+      owner: string;
+      name: string;
+      url: string;
+      description: string;
+      stars: number;
+      language: string;
+      topics: string[];
+    }[];
+    unlimited: boolean;
+  }> {
+    const res = await fetch('/api/github/discover-repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to discover GitHub repositories: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  /**
    * Automatically create a new repository on GitHub (e.g. "sanitized-agent-engines")
    */
   async createRepository(
@@ -151,7 +194,8 @@ export const GitHubClient = {
     path: string,
     content: string,
     commitMessage?: string,
-    branch?: string
+    branch?: string,
+    writeMode: 'create_unique' | 'overwrite' = 'create_unique'
   ): Promise<PushResult> {
     const res = await fetch('/api/github/push-file', {
       method: 'POST',
@@ -163,6 +207,7 @@ export const GitHubClient = {
         content,
         commitMessage: commitMessage || `feat(engine): add ${path}`,
         branch,
+        writeMode,
       }),
     });
 
@@ -174,7 +219,7 @@ export const GitHubClient = {
   },
 
   /**
-   * Push complete engine bundle (specification.md, runtime.ts, and README.md index)
+   * Push complete engine bundle (specification.md, individual engine ts files, and dedicated catalog)
    */
   async pushEngineBundle(
     token: string,
@@ -182,7 +227,9 @@ export const GitHubClient = {
     engineName: string,
     markdownContent: string,
     sourceRepo?: string,
-    branch?: string
+    branch?: string,
+    targetDir = 'engines',
+    writeMode: 'create_unique' | 'overwrite' = 'create_unique'
   ): Promise<BundlePushResult> {
     const res = await fetch('/api/github/push-engine-bundle', {
       method: 'POST',
@@ -194,6 +241,8 @@ export const GitHubClient = {
         markdownContent,
         sourceRepo,
         branch,
+        targetDir,
+        writeMode,
       }),
     });
 

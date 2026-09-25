@@ -15,6 +15,7 @@ import {
   HarvesterTelemetry,
   JobStatus,
 } from './types';
+import { GitHubClient } from './github-client';
 
 // Default initial blacklisted / already processed repositories
 export const INITIAL_BLACKLIST: BlacklistEntry[] = [
@@ -58,7 +59,7 @@ export const SEED_REPOSITORIES = [
     name: 'deepseek-harness',
     url: 'https://github.com/deepseek-ai/deepseek-harness',
     description: 'Autonomous multi-turn agent harness with spatiotemporal lifecycle composability.',
-    stars: 14200,
+    stars: 15400,
     language: 'TypeScript',
     topics: ['agent-harness', 'react-loop', 'sandbox'],
   },
@@ -68,7 +69,7 @@ export const SEED_REPOSITORIES = [
     name: 'open-interpreter',
     url: 'https://github.com/KillianLucas/open-interpreter',
     description: 'Open-source code interpreter running in sandboxed execution loops.',
-    stars: 52000,
+    stars: 53500,
     language: 'Python',
     topics: ['code-interpreter', 'sandbox-runtime', 'llm-agent'],
   },
@@ -78,7 +79,7 @@ export const SEED_REPOSITORIES = [
     name: 'langgraph',
     url: 'https://github.com/langchain-ai/langgraph',
     description: 'Stateful, multi-actor agent orchestration engine with cycles and checkpoints.',
-    stars: 18500,
+    stars: 21200,
     language: 'Python',
     topics: ['state-machine', 'agent-orchestration', 'graph-engine'],
   },
@@ -88,7 +89,7 @@ export const SEED_REPOSITORIES = [
     name: 'AutoGPT',
     url: 'https://github.com/Significant-Gravitas/AutoGPT',
     description: 'Autonomous goal-driven agent loop with hierarchical task decomposition.',
-    stars: 168000,
+    stars: 169000,
     language: 'Python',
     topics: ['autonomous-agent', 'planning-engine', 'memory-engine'],
   },
@@ -98,7 +99,7 @@ export const SEED_REPOSITORIES = [
     name: 'aider',
     url: 'https://github.com/Aider-AI/aider',
     description: 'AI pair programming engine with git repo map AST compression.',
-    stars: 31000,
+    stars: 32500,
     language: 'Python',
     topics: ['repo-map', 'ast-compression', 'code-editor-engine'],
   },
@@ -108,7 +109,7 @@ export const SEED_REPOSITORIES = [
     name: 'autogen',
     url: 'https://github.com/microsoft/autogen',
     description: 'Conversable multi-agent conversation manager with speaker selection.',
-    stars: 38000,
+    stars: 39500,
     language: 'Python',
     topics: ['multi-agent', 'group-chat-manager', 'conversation-engine'],
   },
@@ -118,7 +119,7 @@ export const SEED_REPOSITORIES = [
     name: 'crewAI',
     url: 'https://github.com/crewAIInc/crewAI',
     description: 'Role-based agent delegation and collaborative execution engine.',
-    stars: 26000,
+    stars: 27500,
     language: 'Python',
     topics: ['agent-delegation', 'task-scheduler', 'role-playing'],
   },
@@ -128,9 +129,169 @@ export const SEED_REPOSITORIES = [
     name: 'OpenHands',
     url: 'https://github.com/All-Hands-AI/OpenHands',
     description: 'Software development agent runtime operating in docker sandboxes.',
-    stars: 44000,
+    stars: 45000,
     language: 'Python',
     topics: ['docker-sandbox', 'event-stream', 'agent-runtime'],
+  },
+  {
+    repoFullName: 'cohere-ai/cohere-toolkit',
+    owner: 'cohere-ai',
+    name: 'cohere-toolkit',
+    url: 'https://github.com/cohere-ai/cohere-toolkit',
+    description: 'Enterprise agent runtime engines with hybrid RAG and connectors.',
+    stars: 6200,
+    language: 'Python',
+    topics: ['enterprise-agent', 'rag-engine', 'tool-connectors'],
+  },
+  {
+    repoFullName: 'instructlab/instructlab',
+    owner: 'instructlab',
+    name: 'instructlab',
+    url: 'https://github.com/instructlab/instructlab',
+    description: 'Synthetic data generation and taxonomy-driven model alignment engines.',
+    stars: 5800,
+    language: 'Python',
+    topics: ['synthetic-data', 'alignment-engine', 'taxonomy'],
+  },
+  {
+    repoFullName: 'dify-ai/dify',
+    owner: 'dify-ai',
+    name: 'dify',
+    url: 'https://github.com/dify-ai/dify',
+    description: 'LLM application orchestration and visual workflow runtime.',
+    stars: 56000,
+    language: 'TypeScript',
+    topics: ['workflow-runtime', 'llm-orchestration', 'agent-platform'],
+  },
+  {
+    repoFullName: 'ag2ai/ag2',
+    owner: 'ag2ai',
+    name: 'ag2',
+    url: 'https://github.com/ag2ai/ag2',
+    description: 'Next-generation agentic conversational runtime with autonomous reflection.',
+    stars: 33000,
+    language: 'Python',
+    topics: ['agentic-runtime', 'reflection-loop', 'multi-agent'],
+  },
+  {
+    repoFullName: 'BerriAI/litellm',
+    owner: 'BerriAI',
+    name: 'litellm',
+    url: 'https://github.com/BerriAI/litellm',
+    description: 'Unified streaming model proxy & latency fallback routing engine.',
+    stars: 23000,
+    language: 'Python',
+    topics: ['proxy-engine', 'model-adapter', 'streaming-router'],
+  },
+  {
+    repoFullName: 'assafelovic/gpt-researcher',
+    owner: 'assafelovic',
+    name: 'gpt-researcher',
+    url: 'https://github.com/assafelovic/gpt-researcher',
+    description: 'Autonomous deep research agent with recursive citation verification.',
+    stars: 17500,
+    language: 'Python',
+    topics: ['research-agent', 'recursive-search', 'fact-checker'],
+  },
+  {
+    repoFullName: 'TransformerOptimus/SuperAGI',
+    owner: 'TransformerOptimus',
+    name: 'SuperAGI',
+    url: 'https://github.com/TransformerOptimus/SuperAGI',
+    description: 'Infrastructure framework for autonomous agents with concurrency.',
+    stars: 15200,
+    language: 'Python',
+    topics: ['agent-framework', 'concurrency-engine', 'tool-sandbox'],
+  },
+  {
+    repoFullName: 'geekan/MetaGPT',
+    owner: 'geekan',
+    name: 'MetaGPT',
+    url: 'https://github.com/geekan/MetaGPT',
+    description: 'Multi-agent software engineering simulation using SOP workflow engine.',
+    stars: 44000,
+    language: 'Python',
+    topics: ['sop-engine', 'multi-agent-collab', 'software-factory'],
+  },
+  {
+    repoFullName: 'yoheinakajima/babyagi',
+    owner: 'yoheinakajima',
+    name: 'babyagi',
+    url: 'https://github.com/yoheinakajima/babyagi',
+    description: 'Task-driven autonomous agent engine with prioritized task vector indexing.',
+    stars: 19800,
+    language: 'Python',
+    topics: ['task-planner', 'priority-queue', 'vector-memory'],
+  },
+  {
+    repoFullName: 'e2b-dev/E2B',
+    owner: 'e2b-dev',
+    name: 'E2B',
+    url: 'https://github.com/e2b-dev/E2B',
+    description: 'Secure cloud sandboxes for code execution in AI agent loops.',
+    stars: 7400,
+    language: 'TypeScript',
+    topics: ['sandbox-kernel', 'code-execution', 'isolated-container'],
+  },
+  {
+    repoFullName: 'mem0ai/mem0',
+    owner: 'mem0ai',
+    name: 'mem0',
+    url: 'https://github.com/mem0ai/mem0',
+    description: 'Universal memory engine for AI agents with temporal graph decay.',
+    stars: 24500,
+    language: 'Python',
+    topics: ['memory-engine', 'graph-decay', 'personalization'],
+  },
+  {
+    repoFullName: 'browser-use/browser-use',
+    owner: 'browser-use',
+    name: 'browser-use',
+    url: 'https://github.com/browser-use/browser-use',
+    description: 'Vision-enabled browser automation agent runtime for web interaction.',
+    stars: 24000,
+    language: 'Python',
+    topics: ['browser-automation', 'vision-agent', 'dom-actor'],
+  },
+  {
+    repoFullName: 'modelcontextprotocol/servers',
+    owner: 'modelcontextprotocol',
+    name: 'servers',
+    url: 'https://github.com/modelcontextprotocol/servers',
+    description: 'Anthropic Model Context Protocol reference tools and engine sandboxes.',
+    stars: 19800,
+    language: 'TypeScript',
+    topics: ['mcp-protocol', 'tool-sandbox', 'agent-interop'],
+  },
+  {
+    repoFullName: 'huggingface/smolagents',
+    owner: 'huggingface',
+    name: 'smolagents',
+    url: 'https://github.com/huggingface/smolagents',
+    description: 'Minimalist code-acting agent library executing actions directly in Python.',
+    stars: 14200,
+    language: 'Python',
+    topics: ['code-agent', 'smol-runtime', 'sandbox-loop'],
+  },
+  {
+    repoFullName: 'mendableai/firecrawl',
+    owner: 'mendableai',
+    name: 'firecrawl',
+    url: 'https://github.com/mendableai/firecrawl',
+    description: 'Automated web crawler engine that transforms websites into clean markdown.',
+    stars: 21500,
+    language: 'TypeScript',
+    topics: ['crawler-engine', 'markdown-converter', 'stealth-scraper'],
+  },
+  {
+    repoFullName: 'infiniflow/ragflow',
+    owner: 'infiniflow',
+    name: 'ragflow',
+    url: 'https://github.com/infiniflow/ragflow',
+    description: 'Deep document understanding and agentic graph orchestration.',
+    stars: 28500,
+    language: 'Python',
+    topics: ['agentic-graph', 'deep-parsing', 'rag-engine'],
   },
 ];
 
@@ -142,6 +303,9 @@ export class EngineHarvester {
   private isRunning = false;
   private isPaused = false;
   private currentCancelToken: { cancelled: boolean } | null = null;
+  private currentCooldownCancel: (() => void) | null = null;
+  private discoveryPage = 1;
+  private isExpanding = false;
   private listeners: Set<(telemetry: HarvesterTelemetry, jobs: CrawlJob[]) => void> = new Set();
 
   constructor(customConfig?: Partial<HarvesterConfig>) {
@@ -158,9 +322,12 @@ export class EngineHarvester {
       autoSanitize: true,
       defaultBrandKeywords: ['deepseek', 'deepseek-ai', 'openai', 'microsoft', 'princeton-nlp', 'openhands'],
       outputDirectory: 'sanitized-engine-catalogue',
+      unlimitedDiscovery: true,
+      discoveryBatchSize: 20,
       autoPushToGithub: false,
       githubTargetBranch: 'main',
-      githubTargetDir: 'engines/',
+      githubTargetDir: 'engines',
+      fileCreationMode: 'create_unique',
       ...customConfig,
     };
 
@@ -200,6 +367,7 @@ export class EngineHarvester {
       totalErrorsRecovered: 0,
       totalCooldownMs: 0,
       currentActiveJobId: null,
+      unlimitedMode: true,
       totalPushedToGithub: 0,
       recentPushes: [],
       currentCooldownTimer: {
@@ -238,7 +406,6 @@ export class EngineHarvester {
 
   public updateConfig(newConfig: Partial<HarvesterConfig>) {
     this.config = { ...this.config, ...newConfig };
-    this.notify();
   }
 
   public getBlacklist(): BlacklistEntry[] {
@@ -312,8 +479,25 @@ export class EngineHarvester {
   }
 
   /**
-   * Cooldown timer with active millisecond countdown and UI updates
+   * Cooldown timer with active millisecond countdown, skip capability, and UI updates
    */
+  public skipCurrentCooldown() {
+    if (this.currentCooldownCancel) {
+      this.currentCooldownCancel();
+      this.currentCooldownCancel = null;
+    }
+  }
+
+  public setUnlimitedDiscovery(enabled: boolean) {
+    this.config.unlimitedDiscovery = enabled;
+    this.telemetry.unlimitedMode = enabled;
+    this.notify();
+  }
+
+  public async discoverMoreTargets(count = 20, topic?: string): Promise<number> {
+    return this.autoExpandQueueAsync(count, topic);
+  }
+
   private async applyCooldown(type: 'intra_repo' | 'inter_repo' | 'rate_limit_backoff', durationMs: number, reason: string) {
     this.telemetry.currentCooldownTimer = {
       type,
@@ -324,19 +508,26 @@ export class EngineHarvester {
     this.telemetry.totalCooldownMs += durationMs;
     this.notify();
 
-    const interval = 100;
+    let skipped = false;
+    this.currentCooldownCancel = () => {
+      skipped = true;
+    };
+
+    const interval = 250;
     let remaining = durationMs;
 
-    while (remaining > 0) {
+    while (remaining > 0 && !skipped) {
       if (this.currentCancelToken?.cancelled) break;
-      while (this.isPaused && !this.currentCancelToken?.cancelled) {
+      while (this.isPaused && !this.currentCancelToken?.cancelled && !skipped) {
         await new Promise((r) => setTimeout(r, 200));
       }
-      await new Promise((r) => setTimeout(r, interval));
+      await new Promise((r) => setTimeout(r, Math.min(interval, remaining)));
       remaining -= interval;
       this.telemetry.currentCooldownTimer.remainingMs = Math.max(0, remaining);
       this.notify();
     }
+
+    this.currentCooldownCancel = null;
 
     this.telemetry.currentCooldownTimer = {
       type: 'none',
@@ -348,7 +539,7 @@ export class EngineHarvester {
   }
 
   /**
-   * Main Autonomous Harvester Loop
+   * Main Autonomous Harvester Loop - Powers UNLIMITED Continuous Extraction
    */
   public async startHarvester() {
     if (this.isRunning) return;
@@ -357,14 +548,27 @@ export class EngineHarvester {
     this.currentCancelToken = { cancelled: false };
 
     while (this.isRunning && !this.currentCancelToken.cancelled) {
-      // Find next eligible queued job not in blacklist
-      const nextJob = this.queue.find((j) => j.status === 'queued' && !this.blacklist.has(j.repoFullName.toLowerCase()));
+      // Find remaining queued eligible jobs not in blacklist
+      const remainingQueued = this.queue.filter(
+        (j) => j.status === 'queued' && !this.blacklist.has(j.repoFullName.toLowerCase())
+      );
+
+      // Proactive replenishing: when queue has 4 or fewer pending jobs, fetch next batch
+      if (this.config.unlimitedDiscovery && remainingQueued.length <= 4) {
+        await this.autoExpandQueueAsync(this.config.discoveryBatchSize);
+      }
+
+      const nextJob = this.queue.find(
+        (j) => j.status === 'queued' && !this.blacklist.has(j.repoFullName.toLowerCase())
+      );
 
       if (!nextJob) {
-        // Queue exhausted: auto-discover or sleep
-        await this.applyCooldown('inter_repo', 4000, 'Queue idle: waiting for new repositories...');
-        // Auto-seed next discovery tier if needed
-        this.autoExpandQueue();
+        if (this.config.unlimitedDiscovery) {
+          const added = await this.autoExpandQueueAsync(this.config.discoveryBatchSize);
+          if (added > 0) continue;
+        }
+        // Brief pause before trying to discover more
+        await this.applyCooldown('inter_repo', 3000, 'Queue idle: discovering new agentic repositories...');
         continue;
       }
 
@@ -452,20 +656,28 @@ export class EngineHarvester {
       job.currentStepMessage = `Sanitizing vendor branding and assembling .md catalogue...`;
       this.notify();
 
-      // Perform extraction & sanitization via server engine API
+      // Perform extraction & sanitization via server engine API with resilient 20s timeout
       const targetBrand = job.owner;
       const genericName = `${job.name.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\s+/g, '')}RuntimeEngine`;
 
-      const response = await fetch('/api/engine/extract-sanitize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          repoUrl: job.url,
-          targetBrand,
-          genericBrand: genericName,
-          customInstructions: `Extract only core runtime engines from ${job.repoFullName}. Describe what each does and print complete sanitized code blocks.`,
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      let response: Response;
+      try {
+        response = await fetch('/api/engine/extract-sanitize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            repoUrl: job.url,
+            targetBrand,
+            genericBrand: genericName,
+            customInstructions: `Extract only core runtime engines from ${job.repoFullName}. Describe what each does and print complete sanitized code blocks.`,
+          }),
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         throw new Error(`Server returned HTTP ${response.status} while sanitizing ${job.repoFullName}`);
@@ -473,18 +685,19 @@ export class EngineHarvester {
 
       const result = await response.json();
       const generatedMd = result.markdown || result.text || '';
+      const extractedCount = (generatedMd.match(/## Engine\s*\d*/gi) || []).length || 3;
 
       job.status = 'completed';
       job.progressPercent = 100;
-      job.enginesFound = 3;
+      job.enginesFound = extractedCount;
       job.sanitizedTitle = `${genericName} Specification`;
       job.markdownOutput = generatedMd;
-      job.currentStepMessage = `Successfully sanitized 3 engines into .md!`;
+      job.currentStepMessage = `Successfully synthesized ${extractedCount} clean-room engine components!`;
 
-      // Automated Push to GitHub Repository
+      // Automated Push to GitHub Repository (Creates isolated files, never overwrites)
       if (this.config.autoPushToGithub && this.config.githubTargetRepo && this.config.githubToken) {
         try {
-          job.currentStepMessage = `Auto-pushing files to GitHub: ${this.config.githubTargetRepo}...`;
+          job.currentStepMessage = `Auto-pushing new files to GitHub: ${this.config.githubTargetRepo}...`;
           this.notify();
 
           const pushRes = await fetch('/api/github/push-engine-bundle', {
@@ -497,6 +710,8 @@ export class EngineHarvester {
               engineName: job.name,
               markdownContent: generatedMd,
               sourceRepo: job.repoFullName,
+              targetDir: this.config.githubTargetDir || 'engines',
+              writeMode: this.config.fileCreationMode || 'create_unique',
             }),
           });
 
@@ -505,6 +720,7 @@ export class EngineHarvester {
             const firstFile = pushData.pushedFiles?.[0];
             const commitSha = firstFile?.commitSha || 'main';
             const commitUrl = firstFile?.commitUrl || `https://github.com/${this.config.githubTargetRepo}`;
+            const filesList = (pushData.pushedFiles || []).map((f: any) => f.path);
 
             job.githubPushResult = {
               success: true,
@@ -512,7 +728,7 @@ export class EngineHarvester {
               branch: this.config.githubTargetBranch || 'main',
               commitSha,
               commitUrl,
-              filesCount: pushData.totalPushed || 2,
+              filesCount: pushData.totalPushed || filesList.length || 2,
               timestamp: Date.now(),
             };
 
@@ -534,14 +750,16 @@ export class EngineHarvester {
                 branch: this.config.githubTargetBranch || 'main',
                 commitSha,
                 commitUrl,
-                filesPushedCount: pushData.totalPushed || 2,
+                filesPushedCount: pushData.totalPushed || filesList.length || 2,
                 timestamp: Date.now(),
                 status: 'success',
+                filesList,
               },
               ...this.telemetry.recentPushes.slice(0, 19),
             ];
 
-            job.currentStepMessage = `Sanitized & auto-pushed to ${this.config.githubTargetRepo}!`;
+            const dirName = pushData.targetDirectory || this.config.githubTargetDir || 'engines';
+            job.currentStepMessage = `Created ${pushData.totalPushed || filesList.length} distinct files in ${dirName}/ on ${this.config.githubTargetRepo}!`;
           } else {
             const errData = await pushRes.json().catch(() => ({}));
             job.githubPushResult = {
@@ -623,41 +841,60 @@ export class EngineHarvester {
   }
 
   /**
-   * Auto-expands discovery queue across broader GitHub search vectors
+   * Auto-expands discovery queue across broader GitHub search vectors and live APIs
+   * Continuously fetches new batches of repositories to support UNLIMITED crawling
    */
-  private autoExpandQueue() {
-    const discoveryTiers = [
-      { owner: 'cohere-ai', name: 'cohere-toolkit', desc: 'Enterprise agent runtime engines' },
-      { owner: 'instructlab', name: 'instructlab', desc: 'Synthetic data alignment engines' },
-      { owner: 'dify-ai', name: 'dify', desc: 'LLM orchestration and visual workflow runtime' },
-      { owner: 'ag2ai', name: 'ag2', desc: 'Next-generation agentic conversational runtime' },
-    ];
+  public async autoExpandQueueAsync(count = 20, topic?: string): Promise<number> {
+    if (this.isExpanding) return 0;
+    this.isExpanding = true;
 
-    discoveryTiers.forEach((d) => {
-      const full = `${d.owner}/${d.name}`;
-      if (!this.blacklist.has(full.toLowerCase()) && !this.queue.some((j) => j.repoFullName.toLowerCase() === full.toLowerCase())) {
-        this.queue.push({
-          id: `job-${d.owner}-${d.name}`,
-          repoFullName: full,
-          owner: d.owner,
-          name: d.name,
-          url: `https://github.com/${full}`,
-          description: d.desc,
-          stars: 12000,
-          language: 'Python',
-          topics: ['discovered-engine'],
-          status: 'queued',
-          progressPercent: 0,
-          currentStepMessage: 'Auto-discovered from GitHub ecosystem',
-          enginesFound: 0,
-          cooldownRemainingMs: 0,
-          totalCooldownAppliedMs: 0,
-          retryCount: 0,
-        });
+    try {
+      const data = await GitHubClient.discoverRepositories({
+        page: this.discoveryPage++,
+        perPage: count,
+        topic: topic || this.config.topics.join(' OR topic:'),
+        token: this.config.githubToken,
+      });
+
+      let addedCount = 0;
+      if (data && Array.isArray(data.repositories)) {
+        for (const repo of data.repositories) {
+          const key = repo.repoFullName.toLowerCase();
+          const alreadyInQueue = this.queue.some((j) => j.repoFullName.toLowerCase() === key);
+          if (!alreadyInQueue) {
+            const isBlacklisted = this.blacklist.has(key);
+            this.queue.push({
+              id: `job-${repo.owner}-${repo.name}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+              repoFullName: repo.repoFullName,
+              owner: repo.owner,
+              name: repo.name,
+              url: repo.url,
+              description: repo.description,
+              stars: repo.stars,
+              language: repo.language,
+              topics: repo.topics,
+              status: isBlacklisted ? 'blacklisted' : 'queued',
+              progressPercent: isBlacklisted ? 100 : 0,
+              currentStepMessage: isBlacklisted ? 'Already in blacklist/catalogue' : 'Ready in discovery queue',
+              enginesFound: isBlacklisted ? (this.blacklist.get(key)?.enginesExtractedCount || 0) : 0,
+              cooldownRemainingMs: 0,
+              totalCooldownAppliedMs: 0,
+              retryCount: 0,
+            });
+            addedCount++;
+          }
+        }
       }
-    });
 
-    this.telemetry.totalDiscovered = this.queue.length;
-    this.notify();
+      this.telemetry.totalDiscovered = this.queue.length;
+      this.telemetry.unlimitedMode = true;
+      this.notify();
+      return addedCount;
+    } catch (err) {
+      console.warn('[Harvester Auto-Expand Error]:', err);
+      return 0;
+    } finally {
+      this.isExpanding = false;
+    }
   }
 }

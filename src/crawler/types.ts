@@ -77,12 +77,16 @@ export interface HarvesterConfig {
   autoSanitize: boolean;
   defaultBrandKeywords: string[];
   outputDirectory: string;
+  // Unlimited Dynamic Discovery Configurations
+  unlimitedDiscovery: boolean; // default true: continuously queries and enqueues infinite repositories
+  discoveryBatchSize: number; // default 20
   // Automated GitHub Repository Push Configurations
   autoPushToGithub: boolean;
   githubToken?: string;
   githubTargetRepo?: string; // e.g. "my-org/sanitized-ai-engines"
   githubTargetBranch?: string; // default "main"
   githubTargetDir?: string; // default "engines/"
+  fileCreationMode?: 'create_unique' | 'overwrite'; // default 'create_unique' (never overwrite existing files)
 }
 
 export interface GitHubPushLedgerItem {
@@ -97,6 +101,7 @@ export interface GitHubPushLedgerItem {
   timestamp: number;
   status: 'success' | 'failed';
   errorMessage?: string;
+  filesList?: string[];
 }
 
 export interface HarvesterTelemetry {
@@ -107,6 +112,7 @@ export interface HarvesterTelemetry {
   totalErrorsRecovered: number;
   totalCooldownMs: number;
   currentActiveJobId: string | null;
+  unlimitedMode?: boolean;
   // GitHub Automated Push metrics
   totalPushedToGithub: number;
   lastPushedCommit?: {

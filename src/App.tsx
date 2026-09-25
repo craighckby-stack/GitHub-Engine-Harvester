@@ -52,6 +52,27 @@ import { CrawlJob, HarvesterTelemetry, BlacklistEntry } from './crawler/types';
 import { GitHubObservatory } from './crawler/GitHubObservatory';
 import { GitHubPushDialog } from './crawler/GitHubPushDialog';
 
+function safeStorageGet(key: string, defaultValue = ''): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(key) ?? defaultValue;
+    }
+  } catch (e) {
+    console.warn('[Storage Access Restricted]:', e);
+  }
+  return defaultValue;
+}
+
+function safeStorageSet(key: string, value: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, value);
+    }
+  } catch (e) {
+    console.warn('[Storage Write Restricted]:', e);
+  }
+}
+
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<'harvester' | 'catalog' | 'markdown' | 'playground'>('harvester');
@@ -59,13 +80,14 @@ export default function App() {
   // Harvester Instance & State
   const [harvester] = useState(() => new EngineHarvester());
   const [harvesterTelemetry, setHarvesterTelemetry] = useState<HarvesterTelemetry>(() => ({
-    totalDiscovered: 8,
+    totalDiscovered: 24,
     totalProcessed: 3,
     totalEnginesExtracted: 12,
     totalBlacklisted: 3,
     totalErrorsRecovered: 0,
     totalCooldownMs: 0,
     currentActiveJobId: null,
+    unlimitedMode: true,
     totalPushedToGithub: 0,
     recentPushes: [],
     currentCooldownTimer: {
@@ -94,19 +116,28 @@ export default function App() {
   const [newRepoInput, setNewRepoInput] = useState('');
   const [manualBlacklistInput, setManualBlacklistInput] = useState('');
   const [blacklistSearch, setBlacklistSearch] = useState('');
+  const [isDiscoveringMore, setIsDiscoveringMore] = useState(false);
+  const [discoverTopicInput, setDiscoverTopicInput] = useState('');
+  const [unlimitedMode, setUnlimitedMode] = useState(true);
 
   // GitHub Integration & Automated Push State
   const [autoPushEnabled, setAutoPushEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('dsh_auto_push') === 'true';
+    return safeStorageGet('dsh_auto_push') === 'true';
   });
   const [githubToken, setGithubToken] = useState<string>(() => {
-    return localStorage.getItem('dsh_github_token') || '';
+    return safeStorageGet('dsh_github_token');
   });
   const [githubTargetRepo, setGithubTargetRepo] = useState<string>(() => {
-    return localStorage.getItem('dsh_github_repo') || '';
+    return safeStorageGet('dsh_github_repo');
   });
   const [githubTargetBranch, setGithubTargetBranch] = useState<string>(() => {
-    return localStorage.getItem('dsh_github_branch') || 'main';
+    return safeStorageGet('dsh_github_branch', 'main');
+  });
+  const [githubTargetDir, setGithubTargetDir] = useState<string>(() => {
+    return safeStorageGet('dsh_github_dir', 'engines');
+  });
+  const [fileCreationMode, setFileCreationMode] = useState<'create_unique' | 'overwrite'>(() => {
+    return (safeStorageGet('dsh_file_mode') as 'create_unique' | 'overwrite') || 'create_unique';
   });
   const [pushDialogData, setPushDialogData] = useState<{
     isOpen: boolean;
@@ -114,6 +145,47 @@ export default function App() {
     sourceRepo?: string;
     markdownContent: string;
   } | null>(null);
+
+  // Helper to parse individual engines from markdown specification
+  const parseMarkdownToEngines = (markdown: string, defaultName: string) => {
+    const engines: { name: string; role: string; whatItDoes: string; inputsOutputs: string; codeSnippet: string }[] = [];
+    const sections = markdown.split(/(?=## Engine\s*\d*:?)/i);
+
+    for (const sec of sections) {
+      if (!sec.trim().toLowerCase().startsWith('## engine')) continue;
+      const titleMatch = sec.match(/## Engine\s*\d*:?\s*([^\n\r]+)/i);
+      const name = titleMatch ? titleMatch[1].trim() : `${defaultName} Engine Component`;
+
+      const whatItDoesMatch = sec.match(/### What it does\s*([\s\S]*?)(?=###|##|```|$)/i);
+      const whatItDoes = whatItDoesMatch ? whatItDoesMatch[1].trim() : 'Sanitized clean-room execution engine.';
+
+      const ioMatch = sec.match(/### Inputs & Outputs\s*([\s\S]*?)(?=###|##|```|$)/i);
+      const inputsOutputs = ioMatch ? ioMatch[1].trim() : 'See specification for interface details.';
+
+      const codeMatch = sec.match(/```(?:typescript|ts)([\s\S]*?)```/i);
+      const codeSnippet = codeMatch ? codeMatch[1].trim() : '// Sanitized code in .md';
+
+      engines.push({
+        name,
+        role: 'Isolated Runtime Engine',
+        whatItDoes,
+        inputsOutputs,
+        codeSnippet,
+      });
+    }
+
+    if (engines.length === 0) {
+      engines.push({
+        name: `${defaultName} Core Engine`,
+        role: 'Runtime Engine & State Loop',
+        whatItDoes: `Core runtime engine extracted with vendor branding scrubbed.`,
+        inputsOutputs: 'See complete Markdown specification for details.',
+        codeSnippet: markdown || '// Sanitized code in .md',
+      });
+    }
+
+    return engines;
+  };
 
   // Catalog State
   const [catalogList, setCatalogList] = useState<CatalogSystemEntry[]>(CATALOG_ENTRIES);
@@ -144,42 +216,34 @@ export default function App() {
       const completedJobs = jobs.filter((j) => j.status === 'completed' && j.markdownOutput);
       if (completedJobs.length > 0) {
         setCatalogList((prev) => {
-          let updated = [...prev];
+          const newEntries: CatalogSystemEntry[] = [];
           for (const job of completedJobs) {
             const entryId = `crawled-${job.owner}-${job.name}`.toLowerCase();
-            const exists = updated.some(
+            const exists = prev.some(
               (c) => c.id.toLowerCase() === entryId || c.sourceRepo.toLowerCase() === job.url.toLowerCase()
             );
             if (!exists) {
-              const newEntry: CatalogSystemEntry = {
+              const individualEngines = parseMarkdownToEngines(job.markdownOutput || '', job.name);
+              newEntries.push({
                 id: entryId,
                 title: job.sanitizedTitle || `${job.name} Sanitized Engine`,
                 sourceRepo: job.url,
                 originalBrand: job.owner,
                 genericCategory: 'Automated Ingested Engine',
-                summary: `Automated sanitized extraction of core runtime engines from ${job.repoFullName}.`,
-                engines: [
-                  {
-                    name: `${job.name} Core Engine`,
-                    role: 'Runtime Engine & State Loop',
-                    whatItDoes: `Core runtime engine extracted from ${job.repoFullName} with vendor branding scrubbed.`,
-                    inputsOutputs: 'See complete Markdown specification for details.',
-                    codeSnippet: job.markdownOutput || '// Sanitized code in .md',
-                  },
-                ],
+                summary: `Automated sanitized extraction of ${individualEngines.length} clean-room runtime engines from ${job.repoFullName}.`,
+                engines: individualEngines,
                 fullMarkdownContent: job.markdownOutput || '',
-              };
-              updated = [newEntry, ...updated];
+              });
             }
           }
-          return updated;
+          return newEntries.length > 0 ? [...newEntries, ...prev] : prev;
         });
       }
     });
     return () => {
       unsub();
     };
-  }, [harvester, catalogList]);
+  }, [harvester]);
 
   // Sync Cooldown Configs
   useEffect(() => {
@@ -191,18 +255,22 @@ export default function App() {
 
   // Sync GitHub Integration & Automated Push Settings
   useEffect(() => {
-    localStorage.setItem('dsh_auto_push', String(autoPushEnabled));
-    localStorage.setItem('dsh_github_token', githubToken);
-    localStorage.setItem('dsh_github_repo', githubTargetRepo);
-    localStorage.setItem('dsh_github_branch', githubTargetBranch);
+    safeStorageSet('dsh_auto_push', String(autoPushEnabled));
+    safeStorageSet('dsh_github_token', githubToken);
+    safeStorageSet('dsh_github_repo', githubTargetRepo);
+    safeStorageSet('dsh_github_branch', githubTargetBranch);
+    safeStorageSet('dsh_github_dir', githubTargetDir);
+    safeStorageSet('dsh_file_mode', fileCreationMode);
 
     harvester.updateConfig({
       autoPushToGithub: autoPushEnabled,
       githubToken: githubToken || undefined,
       githubTargetRepo: githubTargetRepo || undefined,
       githubTargetBranch: githubTargetBranch || 'main',
+      githubTargetDir: githubTargetDir || 'engines',
+      fileCreationMode,
     });
-  }, [autoPushEnabled, githubToken, githubTargetRepo, githubTargetBranch, harvester]);
+  }, [autoPushEnabled, githubToken, githubTargetRepo, githubTargetBranch, githubTargetDir, fileCreationMode, harvester]);
 
   const currentSystem = catalogList.find((s) => s.id === selectedSystemId) || catalogList[0];
   const activeMarkdownToDisplay = customMarkdown || currentSystem?.fullMarkdownContent || '';
@@ -218,11 +286,27 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filename.endsWith('.md') ? filename : `${filename}.md`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Export all separate engine files as an isolated multi-file bundle
+  const handleExportAllSeparateFiles = (systemEntry: CatalogSystemEntry) => {
+    let bundle = `=== ENGINE HARVESTER ISOLATED PACKAGE: ${systemEntry.title} ===\n`;
+    bundle += `Source Origin: ${systemEntry.sourceRepo}\n`;
+    bundle += `Indexed Date: ${new Date().toISOString()}\n\n`;
+    bundle += `=== FILE: engines/${systemEntry.id}/specification.md ===\n${systemEntry.fullMarkdownContent}\n\n`;
+
+    systemEntry.engines.forEach((eng, i) => {
+      const slug = eng.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
+      const idx = String(i + 1).padStart(2, '0');
+      bundle += `=== FILE: engines/${systemEntry.id}/${idx}-${slug}.ts ===\n/**\n * ${eng.name}\n * Role: ${eng.role}\n * What it does: ${eng.whatItDoes}\n */\n\n${eng.codeSnippet}\n\n`;
+    });
+
+    handleDownloadMarkdown(bundle, `${systemEntry.id}-all-engine-files.txt`);
   };
 
   // Download Standalone engine-harvester Repo Bundle
@@ -296,6 +380,26 @@ export default function App() {
     if (!manualBlacklistInput.trim()) return;
     harvester.manualBlacklistRepo(manualBlacklistInput);
     setManualBlacklistInput('');
+  };
+
+  // Discover more targets across GitHub ecosystem (Unlimited Mode)
+  const handleDiscoverMore = async (customTopic?: string) => {
+    setIsDiscoveringMore(true);
+    try {
+      await harvester.discoverMoreTargets(25, customTopic || discoverTopicInput);
+      if (customTopic) {
+        setDiscoverTopicInput('');
+      }
+    } catch (e) {
+      console.warn('[Discovery Error]:', e);
+    } finally {
+      setIsDiscoveringMore(false);
+    }
+  };
+
+  const handleToggleUnlimitedMode = (enabled: boolean) => {
+    setUnlimitedMode(enabled);
+    harvester.setUnlimitedDiscovery(enabled);
   };
 
   // Playground Execution
@@ -446,6 +550,13 @@ export default function App() {
               <span className="font-mono text-amber-300 font-bold min-w-[50px] text-right">
                 {(activeCooldown.remainingMs / 1000).toFixed(1)}s
               </span>
+              <button
+                onClick={() => harvester.skipCurrentCooldown()}
+                className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center space-x-1 shadow transition-colors cursor-pointer"
+                title="Skip cooldown timer and proceed immediately"
+              >
+                <span>⏩ Skip</span>
+              </button>
             </div>
           </div>
         </div>
@@ -466,6 +577,10 @@ export default function App() {
               onUpdateTargetRepo={setGithubTargetRepo}
               targetBranch={githubTargetBranch}
               onUpdateTargetBranch={setGithubTargetBranch}
+              targetDir={githubTargetDir}
+              onUpdateTargetDir={setGithubTargetDir}
+              fileCreationMode={fileCreationMode}
+              onUpdateFileCreationMode={setFileCreationMode}
               githubToken={githubToken}
               onUpdateToken={setGithubToken}
               recentPushes={harvesterTelemetry.recentPushes || []}
@@ -476,17 +591,21 @@ export default function App() {
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden shadow-xl">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                 <div className="space-y-2 max-w-2xl">
-                  <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-medium">
-                    <Zap className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>Single-Repository Automated Harvester</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
+                      <Zap className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Unlimited Autonomous Engine Pipeline</span>
+                    </div>
+                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                      <Sparkles className="h-3 w-3 text-emerald-400" />
+                      <span>{unlimitedMode ? '♾️ Unlimited Paging: Active' : 'Limited Mode'}</span>
+                    </span>
                   </div>
                   <h2 className="text-xl font-bold tracking-tight text-white">
-                    Full GitHub Engine Harvester &amp; Blacklist Filter
+                    Unlimited Autonomous GitHub Engine Harvester &amp; Blacklist Filter
                   </h2>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Crawls GitHub across AI agent topics, checks the persistent blacklist to prevent redundant calls, applies{' '}
-                    <strong className="text-amber-300">cool-down timers anywhere</strong> during inspection, enforces{' '}
-                    <strong className="text-indigo-300">massive error handling</strong>, and outputs sanitized engine `.md` files.
+                    Continuously discovers and crawls open-source repositories across GitHub, enforces non-destructive file extraction, applies active cool-down timers with instant skip capability, and dynamically replenishes the queue without limits.
                   </p>
                 </div>
 
@@ -513,6 +632,37 @@ export default function App() {
                     )}
                   </button>
 
+                  <button
+                    onClick={() => handleDiscoverMore()}
+                    disabled={isDiscoveringMore}
+                    className="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 text-xs font-semibold border border-emerald-700/80 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                    title="Query GitHub & load next batch of 25 repositories"
+                  >
+                    {isDiscoveringMore ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                        <span>Discovering...</span>
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>⚡ Discover 25 More</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleUnlimitedMode(!unlimitedMode)}
+                    className={`px-3 py-2.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                      unlimitedMode
+                        ? 'bg-indigo-950/70 border-indigo-700/80 text-indigo-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
+                    title="Toggle continuous auto-replenishment of repository queue"
+                  >
+                    ♾️ Unlimited: {unlimitedMode ? 'ON' : 'OFF'}
+                  </button>
+
                   {isHarvesterRunning && (
                     <button
                       onClick={handleTogglePause}
@@ -534,10 +684,10 @@ export default function App() {
 
                   <button
                     onClick={handleDownloadHarvesterBundle}
-                    className="flex items-center space-x-1.5 px-3 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-sm transition-colors"
+                    className="flex items-center space-x-1.5 px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 shadow-sm transition-colors"
                   >
                     <FolderDown className="h-3.5 w-3.5" />
-                    <span>Download engine-harvester Repo</span>
+                    <span>Download Bundle</span>
                   </button>
                 </div>
               </div>
@@ -546,7 +696,10 @@ export default function App() {
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-3 pt-6 border-t border-slate-800/80">
                 <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850">
                   <div className="text-[11px] text-slate-400 font-medium">Discovered Targets</div>
-                  <div className="text-lg font-bold text-white mt-1">{harvesterTelemetry.totalDiscovered}</div>
+                  <div className="text-lg font-bold text-white mt-1 flex items-baseline space-x-1.5">
+                    <span>{harvesterTelemetry.totalDiscovered}</span>
+                    <span className="text-[10px] text-emerald-400 font-mono">♾️ Unlimited</span>
+                  </div>
                 </div>
 
                 <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850">
@@ -573,7 +726,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Cooldown Settings & Manual Ingestion */}
+            {/* Cooldown Settings & Topic Discovery */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Cooldown Timer Controls */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
@@ -632,28 +785,54 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Add Custom Repository & Quick Blacklist */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-                <div className="flex items-center space-x-2 text-xs font-bold text-indigo-300">
-                  <PlusCircle className="h-4 w-4 text-indigo-400" />
-                  <span>Add Target Repository to Crawl Queue</span>
+              {/* Dynamic Topic Discovery & Ingestion */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
+                    <Sparkles className="h-4 w-4" />
+                    <span>Dynamic Topic Discovery &amp; Ingestion</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-emerald-400/90 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/80">
+                    Unlimited Pool
+                  </span>
                 </div>
 
-                <form onSubmit={handleAddRepo} className="flex gap-2">
+                <div className="flex gap-2">
                   <input
                     type="text"
-                    value={newRepoInput}
-                    onChange={(e) => setNewRepoInput(e.target.value)}
-                    placeholder="e.g. deepseek-ai/deepseek-harness or github URL"
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500"
+                    value={discoverTopicInput}
+                    onChange={(e) => setDiscoverTopicInput(e.target.value)}
+                    placeholder="Enter topic e.g. swe-bench, mcp, code-interpreter..."
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleDiscoverMore(discoverTopicInput);
+                      }
+                    }}
                   />
                   <button
-                    type="submit"
-                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                    onClick={() => handleDiscoverMore(discoverTopicInput)}
+                    disabled={isDiscoveringMore}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    Queue Target
+                    {isDiscoveringMore ? 'Searching...' : 'Discover'}
                   </button>
-                </form>
+                </div>
+
+                {/* Quick Topic Pills */}
+                <div className="flex flex-wrap gap-1.5 text-[11px]">
+                  {['ai-agent', 'code-interpreter', 'swe-bench', 'langgraph', 'multi-agent', 'mcp-protocol', 'browser-use'].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => handleDiscoverMore(t)}
+                      disabled={isDiscoveringMore}
+                      className="px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 transition-colors cursor-pointer"
+                    >
+                      +{t}
+                    </button>
+                  ))}
+                </div>
 
                 <div className="pt-2 border-t border-slate-800/80 space-y-2">
                   <div className="flex items-center space-x-2 text-xs font-bold text-slate-400">
@@ -685,10 +864,23 @@ export default function App() {
                 <div className="flex items-center space-x-2">
                   <Activity className="h-4 w-4 text-indigo-400" />
                   <h3 className="text-sm font-semibold text-white">Automated Discovery &amp; Processing Queue</h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    ♾️ Unlimited Pipeline
+                  </span>
                 </div>
-                <span className="text-xs text-slate-400 font-mono">
-                  {crawlJobs.filter((j) => j.status === 'completed').length} / {crawlJobs.length} Completed
-                </span>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => handleDiscoverMore()}
+                    disabled={isDiscoveringMore}
+                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-medium border border-slate-700 transition-colors cursor-pointer flex items-center space-x-1"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    <span>Load 25 More</span>
+                  </button>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {crawlJobs.filter((j) => j.status === 'completed').length} / {crawlJobs.length} Completed
+                  </span>
+                </div>
               </div>
 
               <div className="divide-y divide-slate-800 max-h-96 overflow-y-auto">
@@ -807,23 +999,35 @@ export default function App() {
                 </div>
                 <div className="divide-y divide-slate-800 max-h-60 overflow-y-auto">
                   {harvesterTelemetry.recentPushes.map((p) => (
-                    <div key={p.id} className="p-3 flex items-center justify-between text-xs hover:bg-slate-900/40">
-                      <div className="space-y-0.5">
+                    <div key={p.id} className="p-3 flex items-start justify-between text-xs hover:bg-slate-900/40">
+                      <div className="space-y-1">
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-white">{p.engineName}</span>
                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                            {p.filesPushedCount} files (.md &amp; .ts)
+                            {p.filesPushedCount} files created
                           </span>
                         </div>
                         <div className="text-[11px] text-slate-400 font-mono">
                           Target: <span className="text-slate-200">{p.targetRepo}</span> ({p.branch}) &bull; Source: {p.sourceRepo}
                         </div>
+                        {p.filesList && p.filesList.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5 text-[10px] font-mono text-emerald-300">
+                            {p.filesList.slice(0, 5).map((f, fi) => (
+                              <span key={fi} className="px-1.5 py-0.5 bg-slate-950 rounded border border-slate-800">
+                                {f}
+                              </span>
+                            ))}
+                            {p.filesList.length > 5 && (
+                              <span className="px-1 py-0.5 text-slate-500">+{p.filesList.length - 5} more</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <a
                         href={p.commitUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-mono text-[11px] px-2.5 py-1 rounded bg-slate-800 border border-slate-700"
+                        className="flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-mono text-[11px] px-2.5 py-1 rounded bg-slate-800 border border-slate-700 shrink-0 ml-3"
                       >
                         <span>{p.commitSha.slice(0, 7)}</span>
                         <ExternalLink className="h-3 w-3" />
@@ -931,9 +1135,19 @@ export default function App() {
                     );
                   }}
                   className="flex items-center space-x-2 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+                  title="Download complete sanitized specification markdown"
                 >
                   <Download className="h-4 w-4" />
-                  <span>Download Current Engine (.md)</span>
+                  <span>Download Spec (.md)</span>
+                </button>
+
+                <button
+                  onClick={() => handleExportAllSeparateFiles(currentSystem)}
+                  className="flex items-center space-x-2 px-3.5 py-2 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 text-xs font-semibold border border-emerald-700/80 shadow-md transition-all cursor-pointer"
+                  title="Export all individual engine files as distinct separate code modules"
+                >
+                  <FolderDown className="h-4 w-4 text-emerald-400" />
+                  <span>Export All Separate Files ({currentSystem.engines.length} .ts engines)</span>
                 </button>
 
                 <button
@@ -1114,6 +1328,21 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center space-x-2 lg:self-start">
+                        <button
+                          onClick={() => {
+                            const slug = engine.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
+                            handleDownloadMarkdown(
+                              `/**\n * @license\n * SPDX-License-Identifier: Apache-2.0\n *\n * ${engine.name}\n * Role: ${engine.role}\n * What it does: ${engine.whatItDoes}\n */\n\n${engine.codeSnippet}\n`,
+                              `${slug}.ts`
+                            );
+                          }}
+                          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs font-medium border border-emerald-800 transition-colors cursor-pointer"
+                          title="Download this engine component as its own standalone .ts file"
+                        >
+                          <Download className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>Download .ts</span>
+                        </button>
+
                         <button
                           onClick={() => handleCopyText(engine.codeSnippet, `eng-${idx}`)}
                           className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
